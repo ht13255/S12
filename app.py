@@ -2,10 +2,9 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import pdfkit
-import os
 
 # wkhtmltopdf의 경로 설정 (필요한 경우)
-path_to_wkhtmltopdf = '/usr/local/bin/wkhtmltopdf'  # 자신의 시스템에 맞게 경로 설정
+path_to_wkhtmltopdf = '/usr/local/bin/wkhtmltopdf'  # 자신의 시스템에 맞게 경로 설정 (Windows의 경우 실행 파일 경로)
 config = pdfkit.configuration(wkhtmltopdf=path_to_wkhtmltopdf)
 
 # Streamlit 웹페이지 타이틀
