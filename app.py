@@ -1,152 +1,92 @@
-# 파일명: streamlit_app.py
-
-import streamlit as st
+# /web_scraper_app.py
+import requests
 from bs4 import BeautifulSoup
-import aiohttp
-import asyncio
-from fpdf import FPDF
+import pandas as pd
+import pdfkit
 import json
-import hashlib
-from urllib.parse import urljoin
-import random
-import time
+import streamlit as st
 
-# 광고, 구독, 인스타그램 링크의 필터링 기준 설정
-FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register", "instagram"]
-
-# 일반 브라우저와 유사한 User-Agent 목록
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/80.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Edge/18.18363",
-]
-
-def filter_links(links):
-    """광고, 구독, 인스타그램 링크를 필터링"""
-    return [link for link in links if not any(keyword in link for keyword in FILTER_KEYWORDS)]
-
-async def fetch_content(url, retries=3):
-    """해당 URL의 HTML을 가져와 파싱 및 텍스트, 이미지 크롤링"""
-    headers = {"User-Agent": random.choice(USER_AGENTS)}  # 무작위 User-Agent 설정
-
-    for attempt in range(retries):
-        try:
-            async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        raise Exception(f"Failed to fetch {url} with status code {response.status}")
-                    
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    
-                    # 모든 텍스트 수집
-                    text_content = "\n".join([element.get_text() for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
-                    
-                    # 이미지 링크 수집
-                    images = [img['src'] for img in soup.find_all("img") if 'src' in img.attrs]
-                    return text_content, images
-
-        except Exception as e:
-            if attempt < retries - 1:
-                wait_time = random.uniform(1, 3)  # 대기 시간 추가
-                time.sleep(wait_time)
-            else:
-                st.error(f"{url} 크롤링 중 오류 발생: {e}")
-                return None, None
-
-async def fetch_main_page_links(url):
-    """메인 페이지에서 모든 링크를 가져옴"""
-    headers = {"User-Agent": random.choice(USER_AGENTS)}  # 무작위 User-Agent 설정
-
-    try:
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to fetch main page with status code {response.status}")
-
-                html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # 모든 링크 가져오기
-                links = [urljoin(url, a['href']) for a in soup.find_all('a', href=True)]
-                return filter_links(links)
-
-    except Exception as e:
-        st.error(f"메인 페이지에서 링크를 가져오는 중 오류 발생: {e}")
-        return []
-
-def create_pdf(content):
-    """텍스트와 이미지를 포함한 PDF 파일 생성"""
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
+# 각 웹사이트에서 기사의 링크를 가져오는 함수
+def get_article_links(base_url, link_selector, unwanted_selectors):
+    response = requests.get(base_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
     
-    for page, (text, images) in enumerate(content):
-        pdf.cell(200, 10, txt=f"Page {page + 1}", ln=True)
-        pdf.multi_cell(0, 10, text.encode('latin-1', 'replace').decode('latin-1'))  # UTF-8 문자를 대체하여 처리
-        pdf.ln(10)
-        
-        # 이미지 추가
-        for img_url in images:
-            pdf.cell(0, 10, img_url.encode('latin-1', 'replace').decode('latin-1'), ln=True)
-            pdf.ln(10)
-            
-    pdf_output = "scraped_content.pdf"
-    pdf.output(pdf_output)
-    return pdf_output
-
-def create_json(content):
-    """크롤링 데이터를 JSON 파일로 저장"""
-    json_output = "scraped_content.json"
-    with open(json_output, "w", encoding="utf-8") as f:
-        json.dump(content, f, ensure_ascii=False, indent=4)
-    return json_output
-
-def get_unique_hash(text, images):
-    """중복 확인을 위한 고유 해시 생성"""
-    combined_content = text + "".join(images)
-    return hashlib.md5(combined_content.encode()).hexdigest()
-
-async def scrape_all_links(url):
-    """메인 페이지에서 모든 링크를 가져와 각 링크에 직접 접속하여 콘텐츠 크롤링"""
-    links = await fetch_main_page_links(url)
-    tasks = [fetch_content(link) for link in links]
-    results = await asyncio.gather(*tasks)
+    # 기사 링크 추출
+    links = [a['href'] for a in soup.select(link_selector)]
     
-    unique_pages = set()
-    scraped_data = []
+    # 불필요한 링크 필터링 (광고, 구독 등)
+    for unwanted in unwanted_selectors:
+        links = [link for link in links if unwanted not in link]
+    
+    return links
 
-    for link, (text, images) in zip(links, results):
-        if text or images:
-            # 중복 확인
-            page_hash = get_unique_hash(text, images)
-            if page_hash not in unique_pages:
-                unique_pages.add(page_hash)
-                scraped_data.append({"url": link, "text": text, "images": images})
+# 링크에서 기사 내용을 가져오는 함수
+def fetch_article_content(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # 기사의 본문이 포함된 article 태그 추출
+    article = soup.find("article")
+    paragraphs = article.find_all("p") if article else []
+    content = "\n".join([para.text for para in paragraphs])
+    
+    return content
 
-    return scraped_data
+# PDF로 저장
+def save_to_pdf(content, output_path):
+    pdfkit.from_string(content, output_path)
 
-st.title("웹사이트 콘텐츠 크롤러")
-st.write("특정 웹사이트의 모든 링크에서 광고, 구독 및 인스타그램 링크를 제외한 콘텐츠를 크롤링합니다.")
+# 머신러닝 학습 파일로 저장 (CSV/JSON)
+def save_to_ml_file(data, output_path, format="csv"):
+    if format == "csv":
+        pd.DataFrame(data).to_csv(output_path, index=False)
+    elif format == "json":
+        with open(output_path, 'w') as f:
+            json.dump(data, f)
 
-url = st.text_input("웹사이트 URL을 입력하세요:")
-if st.button("크롤링 시작"):
-    if url:
-        try:
-            # 비동기 크롤링 실행
-            scraped_data = asyncio.run(scrape_all_links(url))
-            
-            # PDF 및 JSON 생성
-            pdf_path = create_pdf([(data["text"], data["images"]) for data in scraped_data])
-            json_path = create_json(scraped_data)
-            
-            # 다운로드 링크 제공
-            st.success("크롤링이 완료되었습니다.")
-            st.download_button(label="PDF 다운로드", data=open(pdf_path, "rb"), file_name="scraped_content.pdf", mime="application/pdf")
-            st.download_button(label="JSON 다운로드", data=open(json_path, "rb"), file_name="scraped_content.json", mime="application/json")
+# Streamlit 앱
+def main():
+    st.title("축구 분석 웹 스크래퍼")
+    
+    # 웹사이트 정보
+    websites = {
+        "Coaches' Voice": {
+            "base_url": "https://learning.coachesvoice.com/category/analysis/",
+            "link_selector": "a[href]",
+            "unwanted_selectors": ["instagram", "subscribe", "ads"]
+        },
+        "The Football Analyst": {
+            "base_url": "https://the-footballanalyst.com/",
+            "link_selector": "a[href]",
+            "unwanted_selectors": ["instagram", "subscribe", "ads"]
+        }
+    }
+    
+    # 웹사이트 선택
+    choice = st.selectbox("스크랩할 웹사이트를 선택하세요", list(websites.keys()))
+    st.write(f"{choice}에서 콘텐츠를 가져옵니다.")
+    
+    # 스크래핑 프로세스
+    site = websites[choice]
+    links = get_article_links(site["base_url"], site["link_selector"], site["unwanted_selectors"])
+    st.write(f"{len(links)}개의 기사를 찾았습니다.")
+    
+    # 기사 내용 수집 및 처리
+    data = []
+    for link in links:
+        content = fetch_article_content(link)
+        data.append({"url": link, "content": content})
         
-        except Exception as e:
-            st.error(f"크롤링에 실패했습니다: {e}")
-    else:
-        st.warning("유효한 URL을 입력하세요.")
+        # PDF로 각 기사를 저장
+        pdf_path = f"articles/{link.split('/')[-1]}.pdf"
+        save_to_pdf(content, pdf_path)
+        
+    # 다운로드 옵션 제공
+    st.write("다운로드 옵션:")
+    st.download_button("PDF 파일 다운로드", pdf_path)
+    save_to_ml_file(data, "articles.csv")
+    st.download_button("CSV 파일 다운로드", "articles.csv")
+    
+# Streamlit 진입점
+if __name__ == "__main__":
+    main()
