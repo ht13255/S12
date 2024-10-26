@@ -1,34 +1,48 @@
-# /web_scraper_app.py
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import pdfkit
 import json
 import streamlit as st
+from urllib.parse import urljoin
 
-# 각 웹사이트에서 기사의 링크를 가져오는 함수
-def get_article_links(base_url, link_selector, unwanted_selectors):
+# URL 분석 후 규칙을 설정하여 링크를 추출하는 함수
+def analyze_and_get_links(base_url):
     response = requests.get(base_url)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # 기사 링크 추출
-    links = [a['href'] for a in soup.select(link_selector)]
+    # 기본 링크 추출 규칙 설정
+    link_selector = 'a[href]'
     
-    # 불필요한 링크 필터링 (광고, 구독 등)
-    for unwanted in unwanted_selectors:
-        links = [link for link in links if unwanted not in link]
+    # 사이트별 패턴을 확인하고 설정
+    if "coachesvoice" in base_url:
+        unwanted_selectors = ["instagram", "subscribe", "ads", "academy"]
+    elif "the-footballanalyst" in base_url:
+        unwanted_selectors = ["instagram", "subscribe", "ads"]
+    else:
+        unwanted_selectors = ["instagram", "subscribe", "ads"]
+    
+    # 스크래핑된 링크를 필터링하여 유효한 링크만 남기기
+    links = [a['href'] for a in soup.select(link_selector) if 'href' in a.attrs]
+    links = [urljoin(base_url, link) for link in links if link.startswith('/') or link.startswith(base_url)]
+    links = [link for link in links if not any(unwanted in link for unwanted in unwanted_selectors)]
     
     return links
 
-# 링크에서 기사 내용을 가져오는 함수
+# 기사 본문을 추출하는 함수
 def fetch_article_content(url):
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # 기사의 본문이 포함된 article 태그 추출
-    article = soup.find("article")
-    paragraphs = article.find_all("p") if article else []
-    content = "\n".join([para.text for para in paragraphs])
+    # 주요 기사 내용을 포함하는 태그 추출
+    article_tags = soup.find_all(["article", "div", "section"], recursive=True)
+    content = ""
+    
+    for tag in article_tags:
+        paragraphs = tag.find_all("p")
+        if len(paragraphs) > 3:  # 실제 기사 내용을 가진 경우
+            content = "\n".join([para.text for para in paragraphs])
+            break
     
     return content
 
@@ -36,7 +50,7 @@ def fetch_article_content(url):
 def save_to_pdf(content, output_path):
     pdfkit.from_string(content, output_path)
 
-# 머신러닝 학습 파일로 저장 (CSV/JSON)
+# CSV 또는 JSON으로 저장
 def save_to_ml_file(data, output_path, format="csv"):
     if format == "csv":
         pd.DataFrame(data).to_csv(output_path, index=False)
@@ -46,47 +60,38 @@ def save_to_ml_file(data, output_path, format="csv"):
 
 # Streamlit 앱
 def main():
-    st.title("축구 분석 웹 스크래퍼")
+    st.title("동적 웹 스크래퍼")
     
-    # 웹사이트 정보
-    websites = {
-        "Coaches' Voice": {
-            "base_url": "https://learning.coachesvoice.com/category/analysis/",
-            "link_selector": "a[href]",
-            "unwanted_selectors": ["instagram", "subscribe", "ads"]
-        },
-        "The Football Analyst": {
-            "base_url": "https://the-footballanalyst.com/",
-            "link_selector": "a[href]",
-            "unwanted_selectors": ["instagram", "subscribe", "ads"]
-        }
-    }
-    
-    # 웹사이트 선택
-    choice = st.selectbox("스크랩할 웹사이트를 선택하세요", list(websites.keys()))
-    st.write(f"{choice}에서 콘텐츠를 가져옵니다.")
-    
-    # 스크래핑 프로세스
-    site = websites[choice]
-    links = get_article_links(site["base_url"], site["link_selector"], site["unwanted_selectors"])
-    st.write(f"{len(links)}개의 기사를 찾았습니다.")
-    
-    # 기사 내용 수집 및 처리
-    data = []
-    for link in links:
-        content = fetch_article_content(link)
-        data.append({"url": link, "content": content})
+    # URL 입력 받기
+    base_url = st.text_input("분석할 웹사이트의 URL을 입력하세요", value="https://learning.coachesvoice.com/category/analysis/")
+    if st.button("크롤링 시작"):
+        st.write(f"{base_url}에서 링크를 분석 중입니다.")
         
-        # PDF로 각 기사를 저장
-        pdf_path = f"articles/{link.split('/')[-1]}.pdf"
-        save_to_pdf(content, pdf_path)
+        # 링크 분석 및 추출
+        links = analyze_and_get_links(base_url)
+        st.write(f"{len(links)}개의 유효한 기사를 찾았습니다.")
         
-    # 다운로드 옵션 제공
-    st.write("다운로드 옵션:")
-    st.download_button("PDF 파일 다운로드", pdf_path)
-    save_to_ml_file(data, "articles.csv")
-    st.download_button("CSV 파일 다운로드", "articles.csv")
-    
-# Streamlit 진입점
+        # 기사 내용 수집
+        data = []
+        for link in links:
+            content = fetch_article_content(link)
+            data.append({"url": link, "content": content})
+            
+            # PDF로 각 기사를 저장
+            pdf_path = f"articles/{link.split('/')[-1]}.pdf"
+            save_to_pdf(content, pdf_path)
+        
+        # 다운로드 옵션 제공
+        st.write("다운로드 옵션:")
+        save_to_ml_file(data, "articles.csv")
+        st.download_button("CSV 파일 다운로드", "articles.csv")
+        
+        st.download_button("PDF 파일 다운로드", pdf_path)
+
+# requirements.txt 파일 생성
+with open("requirements.txt", "w") as f:
+    f.write("requests\nbeautifulsoup4\npandas\npdfkit\nstreamlit\n")
+
+# Streamlit 앱 실행
 if __name__ == "__main__":
     main()
