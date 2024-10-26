@@ -2,42 +2,13 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import json
-import pdfkit
 import tempfile
 import os
+from weasyprint import HTML
 
 # Streamlit 앱 제목
 st.title("웹 페이지 크롤러 (텍스트와 이미지 포함)")
 st.write("URL을 입력하여 모든 링크에 접속하고 페이지 내용을 PDF와 JSON으로 저장합니다.")
-
-# wkhtmltopdf 경로 설정 - 시스템에 맞게 자동 감지 또는 환경 변수 사용 안내
-def get_wkhtmltopdf_path():
-    # 환경 변수에서 경로 확인
-    wkhtmltopdf_path = os.getenv("WKHTMLTOPDF_PATH")
-    if wkhtmltopdf_path and os.path.exists(wkhtmltopdf_path):
-        return wkhtmltopdf_path
-    
-    # 일반적인 시스템 경로 확인 (Ubuntu 및 macOS)
-    paths = ["/usr/local/bin/wkhtmltopdf", "/usr/bin/wkhtmltopdf"]
-    for path in paths:
-        if os.path.exists(path):
-            return path
-
-    # 경로가 없는 경우 안내 메시지
-    st.warning(
-        "wkhtmltopdf 경로를 찾을 수 없습니다. "
-        "환경 변수 'WKHTMLTOPDF_PATH'에 wkhtmltopdf 설치 경로를 설정하고 다시 실행하세요. "
-        "예시:\n- Windows: 'C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe'\n"
-        "- Linux/Mac: '/usr/local/bin/wkhtmltopdf'"
-    )
-    return None
-
-# 경로 설정 함수 호출
-wkhtmltopdf_path = get_wkhtmltopdf_path()
-if wkhtmltopdf_path:
-    config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-else:
-    st.stop()  # wkhtmltopdf 경로가 없으면 앱을 중지
 
 # URL 입력
 url = st.text_input("URL을 입력하세요:", "https://www.web2pdfconvert.com/")
@@ -85,7 +56,7 @@ if url:
 
                     # PDF 파일로 저장
                     pdf_file_path = os.path.join(temp_dir, f"{text[:50]}.pdf")
-                    pdfkit.from_string(page_content, pdf_file_path, configuration=config)  # HTML 콘텐츠를 PDF로 변환
+                    HTML(string=page_content).write_pdf(pdf_file_path)  # HTML 콘텐츠를 PDF로 변환
                     pdf_files.append(pdf_file_path)
                     st.write(f"{pdf_file_path} 파일로 저장 완료")
 
