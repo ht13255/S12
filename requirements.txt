@@ -2,5 +2,5 @@
 requests
 beautifulsoup4
 pandas
-fpdf
+fpdf2
 streamlit
