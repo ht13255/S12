@@ -1,107 +1,45 @@
-import os
-import time
-import json
-from fpdf import FPDF
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
+# app.py
+
 import streamlit as st
+import requests
 from bs4 import BeautifulSoup
 
-# 환경 변수로부터 Chrome과 ChromeDriver 경로를 설정 (환경 변수 미설정 시 기본값 사용)
-CHROME_PATH = os.getenv("CHROME_BIN", "/usr/bin/chromium-browser")  # Chrome 경로 기본값
-CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")  # ChromeDriver 경로 기본값
+# Streamlit 앱 제목
+st.title("Web2PDFConvert 사이트 크롤러")
+st.write("URL을 입력하여 광고와 구독 링크를 제외한 모든 링크를 크롤링합니다.")
 
-# Streamlit 설정
-st.title("렌더링된 페이지 그대로 크롤링")
-st.write("브라우저로 JavaScript가 렌더링된 페이지를 크롤링하고 PDF와 JSON으로 저장합니다.")
+# URL 입력
+url = st.text_input("URL을 입력하세요:", "https://www.web2pdfconvert.com/")
 
-output_folder = 'crawled_data'
-if not os.path.exists(output_folder):
-    os.makedirs(output_folder)
+if url:
+    try:
+        # 웹 페이지 요청
+        response = requests.get(url)
+        response.raise_for_status()  # 요청 실패 시 오류 발생
 
-url_input = st.text_area("크롤링할 블로그 URL을 입력하세요 (줄바꿈으로 구분):")
-urls = [url.strip() for url in url_input.splitlines() if url.strip()]
+        # HTML 내용 파싱
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-def setup_selenium():
-    # Chrome 옵션 설정
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1080')
-    options.binary_location = CHROME_PATH  # Chrome 설치 경로 설정
+        # 페이지 제목 추출
+        title = soup.find('title').text
+        st.write("### 페이지 제목:", title)
 
-    # ChromeDriver 설치 경로 명시적 설정
-    service = Service(CHROMEDRIVER_PATH)
-    service.start()
+        # 모든 링크 크롤링 (광고 및 구독 링크 제외)
+        all_links = {link.text.strip(): link.get('href') for link in soup.find_all('a') if link.get('href')}
+        content_links = {text: href for text, href in all_links.items() if 'ad' not in href.lower() and 'subscribe' not in href.lower()}
+        ad_subscribe_links = {text: href for text, href in all_links.items() if 'ad' in href.lower() or 'subscribe' in href.lower()}
 
-    driver = webdriver.Chrome(service=service, options=options)
-    return driver
+        # 광고 및 구독 링크 제외한 링크 출력
+        st.write("### 콘텐츠 링크 (광고 및 구독 제외):")
+        for text, href in content_links.items():
+            st.write(f"- [{text}]({href})")
 
-def capture_full_page(driver, url, output_folder, page_index):
-    driver.get(url)
-    time.sleep(3)  # 페이지 로딩 대기
+        # 광고 및 구독 링크 출력
+        st.write("### 광고 및 구독 관련 링크:")
+        for text, href in ad_subscribe_links.items():
+            st.write(f"- [{text}]({href})")
 
-    screenshot_path = os.path.join(output_folder, f"page_{page_index}_screenshot.png")
-    driver.save_screenshot(screenshot_path)
-
-    html = driver.page_source
-    soup = BeautifulSoup(html, 'html.parser')
-    return soup, screenshot_path
-
-def save_content(soup, screenshot_path, page_index, output_folder):
-    page_folder = os.path.join(output_folder, f"page_{page_index}")
-    os.makedirs(page_folder, exist_ok=True)
-
-    texts = [p.get_text(strip=True) for p in soup.find_all(['p', 'div', 'span', 'article', 'section', 'blockquote'])]
-    with open(os.path.join(page_folder, 'text_content.json'), 'w', encoding='utf-8') as json_file:
-        json.dump(texts, json_file, ensure_ascii=False, indent=4)
-
-    screenshot_dest = os.path.join(page_folder, f"page_{page_index}_screenshot.png")
-    os.rename(screenshot_path, screenshot_dest)
-
-    html_path = os.path.join(page_folder, f"page_{page_index}.html")
-    with open(html_path, 'w', encoding='utf-8') as html_file:
-        html_file.write(soup.prettify())
-
-    return {"texts": texts, "screenshot": screenshot_dest, "html": html_path}
-
-def create_pdf_report(data_list):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=10)
-    pdf.set_font("Arial", size=12)
-
-    pdf.cell(200, 10, txt="Crawling Report", ln=True, align='C')
-    for i, data in enumerate(data_list, start=1):
-        pdf.cell(200, 10, txt=f"Page {i} Texts:", ln=True, align='L')
-        for text in data["texts"]:
-            pdf.multi_cell(0, 10, txt=text)
-        pdf.cell(200, 10, txt=f"Page {i} Screenshot:", ln=True, align='L')
-        pdf.image(data["screenshot"], x=10, w=100)
-
-    pdf.output(os.path.join(output_folder, "report.pdf"))
-
-if st.button("크롤링 시작"):
-    if urls:
-        try:
-            driver = setup_selenium()
-            all_data = []
-            for idx, url in enumerate(urls, start=1):
-                st.write(f"URL 크롤링 중... {url}")
-                soup, screenshot_path = capture_full_page(driver, url, output_folder, idx)
-                page_data = save_content(soup, screenshot_path, idx, output_folder)
-                all_data.append(page_data)
-            driver.quit()
-
-            create_pdf_report(all_data)
-            st.success("크롤링 완료!")
-            st.write("크롤링 결과를 다운로드하세요:")
-            with open(os.path.join(output_folder, "report.pdf"), "rb") as pdf_file:
-                st.download_button(label="PDF 다운로드", data=pdf_file, file_name="crawling_report.pdf", mime="application/pdf")
-        except Exception as e:
-            st.error(f"크롤링 중 오류 발생: {e}")
-    else:
-        st.warning("URL을 입력하세요.")
+    except requests.exceptions.RequestException as e:
+        st.error(f"URL 요청에 실패했습니다: {e}")
+    except Exception as e:
+        st.error(f"오류가 발생했습니다: {e}")
