@@ -27,7 +27,8 @@ def get_wkhtmltopdf_path():
     st.warning(
         "wkhtmltopdf 경로를 찾을 수 없습니다. "
         "환경 변수 'WKHTMLTOPDF_PATH'에 wkhtmltopdf 설치 경로를 설정하고 다시 실행하세요. "
-        "Windows 사용자는 'C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe' 경로를 지정할 수 있습니다."
+        "예시:\n- Windows: 'C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe'\n"
+        "- Linux/Mac: '/usr/local/bin/wkhtmltopdf'"
     )
     return None
 
