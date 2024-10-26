@@ -1,5 +1,6 @@
-streamlit
+# requirements.txt
+requests
 beautifulsoup4
-aiohttp
-fpdf
-lxml
+pandas
+pdfkit
+streamlit
