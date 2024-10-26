@@ -1,3 +1,4 @@
+# /dynamic_web_scraper_app.py
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -5,6 +6,14 @@ import pdfkit
 import json
 import streamlit as st
 from urllib.parse import urljoin
+import os
+
+# wkhtmltopdf 경로 설정
+# 로컬 실행 시에는 시스템 경로를 사용하고, GitHub에서는 특정 경로로 설정할 수 있도록 합니다.
+if os.path.exists("/usr/local/bin/wkhtmltopdf"):
+    pdfkit_config = pdfkit.configuration(wkhtmltopdf="/usr/local/bin/wkhtmltopdf")
+else:
+    pdfkit_config = None  # 로컬 환경에서 wkhtmltopdf가 PATH에 있을 경우 사용
 
 # URL 분석 후 규칙을 설정하여 링크를 추출하는 함수
 def analyze_and_get_links(base_url):
@@ -48,7 +57,8 @@ def fetch_article_content(url):
 
 # PDF로 저장
 def save_to_pdf(content, output_path):
-    pdfkit.from_string(content, output_path)
+    # wkhtmltopdf 경로가 지정된 경우에만 config 인자를 전달합니다.
+    pdfkit.from_string(content, output_path, configuration=pdfkit_config)
 
 # CSV 또는 JSON으로 저장
 def save_to_ml_file(data, output_path, format="csv"):
@@ -95,3 +105,4 @@ with open("requirements.txt", "w") as f:
 # Streamlit 앱 실행
 if __name__ == "__main__":
     main()
+
