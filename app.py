@@ -1,52 +1,40 @@
+# 파일명: streamlit_app.py
+
 import streamlit as st
 from bs4 import BeautifulSoup
-from requests_html import HTMLSession
+import aiohttp
+import asyncio
 from fpdf import FPDF
 import json
 import concurrent.futures
 import hashlib
 import time
-import asyncio
 
 # 광고 및 구독 링크의 필터링 기준 설정
 FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register"]
-
-# HTMLSession 사용을 위한 초기 설정
-session = HTMLSession()
 
 def filter_links(links):
     """광고 및 구독 링크를 필터링"""
     return [link for link in links if not any(keyword in link for keyword in FILTER_KEYWORDS)]
 
-def scrape_content(url, retries=3):
-    """해당 URL의 텍스트와 이미지 내용 크롤링, 실패 시 최대 3번까지 재시도"""
-    for attempt in range(retries):
-        try:
-            response = session.get(url)
+async def fetch_content(url):
+    """해당 URL의 HTML을 가져와 파싱 및 텍스트, 이미지 크롤링"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                html = await response.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # 텍스트 수집
+                text_content = " ".join([p.get_text() for p in soup.find_all("p")])
+                
+                # 이미지 링크 수집
+                images = [img['src'] for img in soup.find_all("img") if 'src' in img.attrs]
+                return text_content, images
 
-            # 이벤트 루프 생성 또는 기존 이벤트 루프 사용
-            if not asyncio.get_event_loop().is_running():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                response.html.render(timeout=20)
-            else:
-                response.html.render(timeout=20)
-
-            soup = BeautifulSoup(response.html.html, 'html.parser')
-            
-            # 텍스트 수집
-            text_content = " ".join([p.get_text() for p in soup.find_all("p")])
-            
-            # 이미지 링크 수집
-            images = [img['src'] for img in soup.find_all("img") if 'src' in img.attrs]
-            return text_content, images
-
-        except Exception as e:
-            if attempt < retries - 1:
-                time.sleep(2)  # 재시도 전 대기 시간 설정
-            else:
-                st.error(f"{url} 크롤링 중 오류 발생: {e}")
-                return None, None
+    except Exception as e:
+        st.error(f"{url} 크롤링 중 오류 발생: {e}")
+        return None, None
 
 def create_pdf(content):
     """텍스트와 이미지를 포함한 PDF 파일 생성"""
@@ -80,6 +68,11 @@ def get_unique_hash(text, images):
     combined_content = text + "".join(images)
     return hashlib.md5(combined_content.encode()).hexdigest()
 
+async def scrape_all_links(links):
+    """모든 링크를 비동기로 크롤링하여 결과 반환"""
+    tasks = [fetch_content(link) for link in links]
+    return await asyncio.gather(*tasks)
+
 st.title("웹사이트 콘텐츠 크롤러")
 st.write("특정 웹사이트의 모든 링크에서 광고 및 구독 링크를 제외한 콘텐츠를 크롤링합니다.")
 
@@ -87,34 +80,27 @@ url = st.text_input("웹사이트 URL을 입력하세요:")
 if st.button("크롤링 시작"):
     if url:
         try:
-            # 입력 URL의 모든 링크 크롤링
-            main_page = session.get(url)
-            main_page.html.render(timeout=20)
-            soup = BeautifulSoup(main_page.html.html, 'html.parser')
+            # 메인 페이지에서 모든 링크 크롤링
+            response = requests.get(url)
+            soup = BeautifulSoup(response.text, 'html.parser')
             
             # 모든 링크 가져오기
             links = [a['href'] for a in soup.find_all('a', href=True)]
             links = filter_links(links)
             unique_pages = set()  # 중복 확인을 위한 집합
             
+            # 링크별 크롤링 실행
             scraped_data = []
+            results = asyncio.run(scrape_all_links(links))
             
-            # 병렬 크롤링 수행
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = {executor.submit(scrape_content, link if link.startswith("http") else url + link): link for link in links}
-                for future in concurrent.futures.as_completed(futures):
-                    link = futures[future]
-                    try:
-                        text, images = future.result()
-                        if text or images:
-                            # 중복 확인
-                            page_hash = get_unique_hash(text, images)
-                            if page_hash not in unique_pages:
-                                unique_pages.add(page_hash)
-                                scraped_data.append({"url": link, "text": text, "images": images})
-                    except Exception as e:
-                        st.error(f"링크 {link} 크롤링 실패: {e}")
-            
+            for link, (text, images) in zip(links, results):
+                if text or images:
+                    # 중복 확인
+                    page_hash = get_unique_hash(text, images)
+                    if page_hash not in unique_pages:
+                        unique_pages.add(page_hash)
+                        scraped_data.append({"url": link, "text": text, "images": images})
+
             # PDF 및 JSON 생성
             pdf_path = create_pdf([(data["text"], data["images"]) for data in scraped_data])
             json_path = create_json(scraped_data)
