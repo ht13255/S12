@@ -10,8 +10,10 @@ import os
 st.title("웹 페이지 크롤러 (텍스트와 이미지 포함)")
 st.write("URL을 입력하여 모든 링크에 접속하고 페이지 내용을 PDF와 JSON으로 저장합니다.")
 
-# wkhtmltopdf 설정 - wkhtmltopdf가 설치된 경로를 자동으로 설정
-pdfkit_config = pdfkit.configuration()
+# wkhtmltopdf 경로 설정 - 시스템에 맞게 설정하세요.
+# MacOS/Linux 예시: /usr/local/bin/wkhtmltopdf
+# Windows 예시: C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe
+config = pdfkit.configuration(wkhtmltopdf="/usr/local/bin/wkhtmltopdf")
 
 # URL 입력
 url = st.text_input("URL을 입력하세요:", "https://www.web2pdfconvert.com/")
@@ -59,7 +61,7 @@ if url:
 
                     # PDF 파일로 저장
                     pdf_file_path = os.path.join(temp_dir, f"{text[:50]}.pdf")
-                    pdfkit.from_string(page_content, pdf_file_path, configuration=pdfkit_config)  # HTML 콘텐츠를 PDF로 변환
+                    pdfkit.from_string(page_content, pdf_file_path, configuration=config)  # HTML 콘텐츠를 PDF로 변환
                     pdf_files.append(pdf_file_path)
                     st.write(f"{pdf_file_path} 파일로 저장 완료")
 
