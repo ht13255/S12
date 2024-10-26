@@ -9,28 +9,31 @@ from urllib.parse import urljoin
 import os
 import re
 
-# URL 분석 후 규칙을 설정하여 링크를 추출하는 함수
+# URL 분석 후 규칙을 설정하여 모든 페이지의 링크를 추출하는 함수
 def analyze_and_get_links(base_url):
-    response = requests.get(base_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # 기본 링크 추출 규칙 설정
-    link_selector = 'a[href]'
-    
-    # 사이트별 패턴을 확인하고 설정
-    if "coachesvoice" in base_url:
+    links = []
+    next_page_url = base_url
+
+    while next_page_url:
+        response = requests.get(next_page_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 현재 페이지의 링크 추출
+        page_links = [a['href'] for a in soup.select('a[href]') if 'href' in a.attrs]
+        page_links = [urljoin(base_url, link) for link in page_links if link.startswith('/') or link.startswith(base_url)]
+        
+        # 불필요한 링크 제거
         unwanted_selectors = ["instagram", "subscribe", "ads", "academy"]
-    elif "the-footballanalyst" in base_url:
-        unwanted_selectors = ["instagram", "subscribe", "ads"]
-    else:
-        unwanted_selectors = ["instagram", "subscribe", "ads"]
-    
-    # 스크래핑된 링크를 필터링하여 유효한 링크만 남기기
-    links = [a['href'] for a in soup.select(link_selector) if 'href' in a.attrs]
-    links = [urljoin(base_url, link) for link in links if link.startswith('/') or link.startswith(base_url)]
-    links = [link for link in links if not any(unwanted in link for unwanted in unwanted_selectors)]
-    
-    return links
+        page_links = [link for link in page_links if not any(unwanted in link for unwanted in unwanted_selectors)]
+        
+        # 현재 페이지의 링크를 결과 리스트에 추가
+        links.extend(page_links)
+
+        # 다음 페이지 URL을 찾기 (다음/Next 버튼)
+        next_page = soup.find("a", string="Next") or soup.find("a", string="다음")  # 페이지 이동 버튼 이름이 다를 경우 조정
+        next_page_url = urljoin(base_url, next_page['href']) if next_page else None
+
+    return list(set(links))  # 중복 링크 제거 후 반환
 
 # 기사 본문을 추출하는 함수
 def fetch_article_content(url):
@@ -46,6 +49,9 @@ def fetch_article_content(url):
         if len(paragraphs) > 3:  # 실제 기사 내용을 가진 경우
             content = "\n".join([para.text for para in paragraphs])
             break
+    
+    # 유니코드 문자 대체
+    content = content.encode('latin-1', 'replace').decode('latin-1')
     
     return content
 
@@ -84,9 +90,9 @@ def main():
     # URL 입력 받기
     base_url = st.text_input("분석할 웹사이트의 URL을 입력하세요", value="https://learning.coachesvoice.com/category/analysis/")
     if st.button("크롤링 시작"):
-        st.write(f"{base_url}에서 링크를 분석 중입니다.")
+        st.write(f"{base_url}에서 모든 페이지의 링크를 분석 중입니다.")
         
-        # 링크 분석 및 추출
+        # 모든 페이지의 링크 분석 및 추출
         links = analyze_and_get_links(base_url)
         st.write(f"{len(links)}개의 유효한 기사를 찾았습니다.")
         
