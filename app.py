@@ -9,13 +9,9 @@ from selenium.webdriver.chrome.options import Options
 import streamlit as st
 from bs4 import BeautifulSoup
 
-# Chrome 설치 경로 설정
-# 필요한 경우 운영 체제에 맞는 Chrome 설치 경로로 변경하세요.
-CHROME_PATH = "/usr/bin/chromium-browser"  # 기본 Ubuntu/Debian 경로
-# 예시: Ubuntu/Debian - "/usr/bin/google-chrome"
-#       CentOS/Fedora - "/usr/bin/chromium-browser"
-#       macOS - "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-#       Windows - "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+# Chrome과 ChromeDriver의 설치 경로 환경 변수 설정
+CHROME_PATH = os.getenv("CHROME_BIN", "/usr/bin/chromium-browser")  # Chrome 경로 기본값
+CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")  # ChromeDriver 경로 기본값
 
 # Streamlit 설정
 st.title("렌더링된 페이지 그대로 크롤링")
@@ -29,17 +25,19 @@ url_input = st.text_area("크롤링할 블로그 URL을 입력하세요 (줄바�
 urls = [url.strip() for url in url_input.splitlines() if url.strip()]
 
 def setup_selenium():
+    # Chrome 옵션 설정
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
-    options.binary_location = "/usr/bin/chromium-browser"  # Chrome 설치 경로
+    options.binary_location = CHROME_PATH  # 사용자 지정 Chrome 경로 설정
 
-    # ChromeDriver의 경로 명시적 지정
-    driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
+    # ChromeDriver 경로를 명시적으로 설정
+    service = Service(CHROMEDRIVER_PATH)
+    service.start()
+    driver = webdriver.Chrome(service=service, options=options)
     return driver
-
 
 def capture_full_page(driver, url, output_folder, page_index):
     driver.get(url)
