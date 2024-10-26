@@ -9,6 +9,14 @@ from selenium.webdriver.chrome.options import Options
 import streamlit as st
 from bs4 import BeautifulSoup
 
+# Chrome 설치 경로 설정
+# 필요한 경우 운영 체제에 맞는 Chrome 설치 경로로 변경하세요.
+CHROME_PATH = "/usr/bin/chromium-browser"  # 기본 Ubuntu/Debian 경로
+# 예시: Ubuntu/Debian - "/usr/bin/google-chrome"
+#       CentOS/Fedora - "/usr/bin/chromium-browser"
+#       macOS - "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+#       Windows - "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+
 # Streamlit 설정
 st.title("렌더링된 페이지 그대로 크롤링")
 st.write("브라우저로 JavaScript가 렌더링된 페이지를 크롤링하고 PDF와 JSON으로 저장합니다.")
@@ -27,7 +35,7 @@ def setup_selenium():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
-    options.binary_location = "/usr/bin/chromium-browser"  # Docker 또는 특정 환경에서의 Chrome 위치
+    options.binary_location = CHROME_PATH  # 사용자 지정 Chrome 경로 설정
 
     # 드라이버 설치 및 실행
     driver_path = ChromeDriverManager().install()
