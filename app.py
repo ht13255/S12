@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 import os
 import re
 
-# 모든 페이지의 링크를 추출하는 함수
+# 모든 페이지의 기사 링크를 추출하는 함수
 def get_all_links(base_url, session):
     links = []
     next_page_url = base_url
@@ -27,7 +27,7 @@ def get_all_links(base_url, session):
         
         links.extend(page_links)
 
-        # 다음 페이지 URL 찾기 (예: Next 버튼)
+        # 다음 페이지 URL 찾기 (예: Next 버튼 또는 페이지 번호)
         next_page = soup.find("a", string="Next") or soup.find("a", string="다음")  # "Next"나 "다음"을 기반으로 페이지를 넘김
         next_page_url = urljoin(base_url, next_page['href']) if next_page else None
 
@@ -60,7 +60,7 @@ def save_to_pdf(contents, output_path):
 
 # Streamlit 앱
 def main():
-    st.title("웹 스크래퍼 (하나의 PDF로 저장)")
+    st.title("웹 스크래퍼 (모든 페이지 크롤링)")
 
     # URL 입력 받기
     base_url = st.text_input("분석할 웹사이트의 URL을 입력하세요", value="https://learning.coachesvoice.com/category/analysis/")
