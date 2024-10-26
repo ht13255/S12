@@ -10,10 +10,23 @@ import os
 st.title("웹 페이지 크롤러 (텍스트와 이미지 포함)")
 st.write("URL을 입력하여 모든 링크에 접속하고 페이지 내용을 PDF와 JSON으로 저장합니다.")
 
-# wkhtmltopdf 경로 설정 - 시스템에 맞게 설정하세요.
-# MacOS/Linux 예시: /usr/local/bin/wkhtmltopdf
-# Windows 예시: C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe
-config = pdfkit.configuration(wkhtmltopdf="/usr/local/bin/wkhtmltopdf")
+# wkhtmltopdf 경로 설정 - 시스템에 맞게 자동 감지 또는 사용자 지정
+def get_wkhtmltopdf_path():
+    # Ubuntu 및 macOS에서의 경로 확인
+    paths = ["/usr/local/bin/wkhtmltopdf", "/usr/bin/wkhtmltopdf"]
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    # Windows 사용자는 직접 경로를 지정할 수 있도록 안내
+    st.warning("wkhtmltopdf 경로를 찾을 수 없습니다. Windows 사용자는 'C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe' 경로를 확인 후 지정해야 합니다.")
+    return None
+
+# 경로 설정 함수 호출
+wkhtmltopdf_path = get_wkhtmltopdf_path()
+if wkhtmltopdf_path:
+    config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
+else:
+    st.stop()  # wkhtmltopdf 경로가 없으면 앱을 중지
 
 # URL 입력
 url = st.text_input("URL을 입력하세요:", "https://www.web2pdfconvert.com/")
