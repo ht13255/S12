@@ -1,7 +1,7 @@
 import os
 import asyncio
 import aiohttp
-import requests  # requests 모듈 추가
+import requests
 import json
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -12,8 +12,9 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 import xml.etree.ElementTree as ET
 
-st.title("고급 블로그 크롤링 앱 (비동기 지원)")
-st.write("다수의 블로그 URL을 입력하여 텍스트와 이미지를 크롤링하고 PDF 리포트를 생성합니다.")
+# Streamlit 설정
+st.title("고급 블로그 크롤링 앱 (최적화된 크롤링)")
+st.write("블로그 URL을 입력하여 텍스트와 이미지를 크롤링하고 PDF 리포트를 생성합니다.")
 
 output_folder = 'crawled_data'
 if not os.path.exists(output_folder):
@@ -22,21 +23,10 @@ if not os.path.exists(output_folder):
 url_input = st.text_area("크롤링할 블로그 URL을 입력하세요 (줄바꿈으로 구분):")
 urls = [url.strip() for url in url_input.splitlines() if url.strip()]
 
-async def fetch_page(session, url):
-    """ 비동기적으로 페이지 HTML 요청 """
-    try:
-        async with session.get(url, timeout=10) as response:
-            response.raise_for_status()
-            return await response.text(), "requests"
-    except Exception as e:
-        st.write(f"요청 실패 ({url}): {e}")
-        return None, "failed"
-
 def fetch_sitemap_urls(base_url):
     """ 사이트맵에서 URL 추출 """
     sitemap_url = urljoin(base_url, "/sitemap.xml")
     page_urls = []
-
     try:
         response = requests.get(sitemap_url)
         response.raise_for_status()
@@ -49,14 +39,19 @@ def fetch_sitemap_urls(base_url):
 
     return page_urls or [base_url]
 
-def detect_api_endpoints(soup, base_url):
-    """ 스크립트 태그에서 API 엔드포인트 감지 """
-    api_urls = set()
-    for script in soup.find_all("script"):
-        if script.string and "fetch" in script.string:
-            fetch_urls = [url.split('\'')[1] for url in script.string.split('fetch(')[1:]]
-            api_urls.update(urljoin(base_url, url) for url in fetch_urls)
-    return list(api_urls)
+async def fetch_page(session, url):
+    """ 비동기적으로 페이지 HTML 요청 """
+    try:
+        async with session.get(url, timeout=10) as response:
+            response.raise_for_status()
+            return await response.text()
+    except Exception as e:
+        st.write(f"요청 실패 ({url}): {e}")
+        return None
+
+def get_soup(html, method="requests"):
+    """ HTML 문자열로 BeautifulSoup 객체 생성 """
+    return BeautifulSoup(html, 'html.parser') if html else None
 
 async def download_image(session, img_url, img_path):
     """ 비동기 이미지 다운로드 """
@@ -68,28 +63,34 @@ async def download_image(session, img_url, img_path):
     except Exception as e:
         st.write(f"이미지 다운로드 실패: {img_url}, 오류: {e}")
 
+def parse_texts(soup):
+    """ HTML에서 텍스트 추출 """
+    texts = [p.get_text(strip=True) for p in soup.find_all(['p', 'div', 'span', 'article', 'section', 'blockquote'])]
+    return [text for text in texts if text]
+
+def parse_images(soup, base_url, page_folder):
+    """ HTML에서 이미지 URL 추출 및 저장 경로 생성 """
+    images = []
+    for img in soup.find_all('img'):
+        img_url = urljoin(base_url, img.get('src') or img.get('data-src', ''))
+        if img_url:
+            img_name = os.path.basename(urlparse(img_url).path)
+            img_path = os.path.join(page_folder, img_name)
+            images.append((img_url, img_path))
+    return images
+
 async def save_content(session, soup, base_url, page_index):
-    """ 페이지 텍스트, 이미지 및 API 데이터 저장 """
-    data = {"texts": [p.get_text(strip=True) for p in soup.find_all(['p', 'div', 'span', 'article', 'section', 'blockquote']) if p.get_text(strip=True)], "images": []}
+    """ 텍스트와 이미지 데이터를 추출하고 파일에 저장 """
+    data = {"texts": parse_texts(soup), "images": []}
     page_folder = os.path.join(output_folder, f"page_{page_index}")
     os.makedirs(page_folder, exist_ok=True)
 
-    # 이미지 다운로드
-    for img in soup.find_all('img'):
-        img_url = urljoin(base_url, img.get('src') or img.get('data-src', ''))
-        img_name = os.path.basename(urlparse(img_url).path)
-        img_path = os.path.join(page_folder, img_name)
+    images = parse_images(soup, base_url, page_folder)
+    for img_url, img_path in images:
         await download_image(session, img_url, img_path)
-        data["images"].append(img_name)
+        data["images"].append(os.path.basename(img_path))
 
-    # API 데이터 가져오기
-    for api_url in detect_api_endpoints(soup, base_url):
-        try:
-            async with session.get(api_url) as response:
-                data["api_data"] = await response.json()
-        except Exception as e:
-            st.write(f"API 요청 실패: {api_url}, 오류: {e}")
-
+    # JSON 저장
     with open(os.path.join(page_folder, 'data.json'), 'w', encoding='utf-8') as json_file:
         json.dump(data, json_file, ensure_ascii=False, indent=4)
     return data
@@ -122,9 +123,9 @@ async def main(urls):
 
             for page_url in page_urls:
                 st.write(f"페이지 처리 중... {page_url}")
-                html, method = await fetch_page(session, page_url)
-                if html:
-                    soup = BeautifulSoup(html, 'html.parser')
+                html = await fetch_page(session, page_url)
+                soup = get_soup(html)
+                if soup:
                     page_data = await save_content(session, soup, page_url, idx)
                     all_data.append(page_data)
                 else:
@@ -141,7 +142,6 @@ async def main(urls):
         with open(os.path.join(output_folder, "data.json"), "rb") as json_file:
             st.download_button(label="JSON 다운로드", data=json_file, file_name="crawling_data.json", mime="application/json")
 
-# 실행 버튼
 if st.button("크롤링 시작"):
     if urls:
         asyncio.run(main(urls))
