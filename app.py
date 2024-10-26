@@ -79,7 +79,7 @@ def main():
         data = []
         pdf_files = []
         
-        for link in links:
+        for i, link in enumerate(links):
             content = fetch_article_content(link)
             data.append({"url": link, "content": content})
             
@@ -99,14 +99,14 @@ def main():
         with open(csv_path, "rb") as f:
             st.download_button("CSV 파일 다운로드", f, file_name="articles.csv")
         
-        # PDF 파일을 개별적으로 다운로드 제공
-        for pdf_file in pdf_files:
+        # 각 PDF 파일에 고유한 key를 지정해 다운로드 버튼 제공
+        for i, pdf_file in enumerate(pdf_files):
             with open(pdf_file, "rb") as f:
-                st.download_button(f"{pdf_file} 다운로드", f, file_name=pdf_file)
+                st.download_button(f"{pdf_file} 다운로드", f, file_name=pdf_file, key=f"download_{i}")
 
 # requirements.txt 파일 생성
 with open("requirements.txt", "w") as f:
-    f.write("requests\nbeautifulsoup4\npandas\nfpdf2\nstreamlit\n")
+    f.write("requests\nbeautifulsoup4\npandas\nfpdf\nstreamlit\n")
 
 # Streamlit 앱 실행
 if __name__ == "__main__":
