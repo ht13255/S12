@@ -8,16 +8,16 @@ from urllib.parse import urljoin
 import os
 import re
 
-# 모든 페이지의 기사 링크를 추출하는 함수
-def get_all_links(base_url, session):
-    links = []
+# 모든 페이지를 탐색하여 기사 링크를 수집하는 함수
+def get_all_article_links(base_url, session):
+    all_links = []
     next_page_url = base_url
 
     while next_page_url:
         response = session.get(next_page_url)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 현재 페이지의 기사 링크 추출
+        # 현재 페이지의 모든 기사 링크 수집
         page_links = [a['href'] for a in soup.select('a[href]') if 'href' in a.attrs]
         page_links = [urljoin(base_url, link) for link in page_links if link.startswith('/') or link.startswith(base_url)]
         
@@ -25,15 +25,15 @@ def get_all_links(base_url, session):
         unwanted_keywords = ["instagram", "subscribe", "ads", "academy"]
         page_links = [link for link in page_links if not any(keyword in link for keyword in unwanted_keywords)]
         
-        links.extend(page_links)
+        all_links.extend(page_links)
 
-        # 다음 페이지 URL 찾기 (예: Next 버튼 또는 페이지 번호)
+        # 다음 페이지 URL 찾기
         next_page = soup.find("a", string="Next") or soup.find("a", string="다음")  # "Next"나 "다음"을 기반으로 페이지를 넘김
         next_page_url = urljoin(base_url, next_page['href']) if next_page else None
 
-    return list(set(links))  # 중복 링크 제거
+    return list(set(all_links))  # 중복 링크 제거
 
-# 기사 본문 추출 함수
+# 각 기사 본문을 추출하는 함수
 def fetch_article_content(url, session):
     response = session.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -72,14 +72,14 @@ def main():
         session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"})
         
         # 모든 페이지의 링크 분석 및 추출
-        links = get_all_links(base_url, session)
-        st.write(f"{len(links)}개의 유효한 기사를 찾았습니다.")
+        article_links = get_all_article_links(base_url, session)
+        st.write(f"{len(article_links)}개의 유효한 기사를 찾았습니다.")
         
         # 기사 내용 수집
         data = []
         contents = []
         
-        for link in links:
+        for link in article_links:
             content = fetch_article_content(link, session)
             data.append({"url": link, "content": content})
             contents.append(content)  # PDF로 결합할 내용 저장
