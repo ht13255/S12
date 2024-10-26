@@ -7,6 +7,7 @@ import asyncio
 from fpdf import FPDF
 import json
 import hashlib
+from urllib.parse import urljoin
 
 # 광고 및 구독 링크의 필터링 기준 설정
 FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register"]
@@ -43,9 +44,7 @@ async def fetch_main_page_links(url):
                 soup = BeautifulSoup(html, 'html.parser')
                 
                 # 모든 링크 가져오기
-                links = [a['href'] for a in soup.find_all('a', href=True)]
-                # 상대 링크를 절대 링크로 변환
-                links = [link if link.startswith("http") else url + link for link in links]
+                links = [urljoin(url, a['href']) for a in soup.find_all('a', href=True)]
                 return filter_links(links)
 
     except Exception as e:
