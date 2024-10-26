@@ -1,3 +1,5 @@
+# 파일명: streamlit_app.py
+
 import streamlit as st
 from bs4 import BeautifulSoup
 import aiohttp
@@ -21,8 +23,8 @@ async def fetch_content(url):
                 html = await response.text()
                 soup = BeautifulSoup(html, 'html.parser')
                 
-                # 텍스트 수집
-                text_content = " ".join([p.get_text() for p in soup.find_all("p")])
+                # 모든 텍스트 수집
+                text_content = "\n".join([element.get_text() for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
                 
                 # 이미지 링크 수집
                 images = [img['src'] for img in soup.find_all("img") if 'src' in img.attrs]
