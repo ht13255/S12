@@ -12,7 +12,7 @@ import random
 import time
 
 # 광고 및 구독 링크의 필터링 기준 설정
-FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register"]
+FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register", "instagram"]
 
 # 일반 브라우저와 유사한 User-Agent 목록
 USER_AGENTS = [
