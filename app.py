@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.options import Options
 import streamlit as st
 from bs4 import BeautifulSoup
 
-# Chrome과 ChromeDriver의 설치 경로 환경 변수 설정
+# 환경 변수로부터 Chrome과 ChromeDriver 경로를 설정 (환경 변수 미설정 시 기본값 사용)
 CHROME_PATH = os.getenv("CHROME_BIN", "/usr/bin/chromium-browser")  # Chrome 경로 기본값
 CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")  # ChromeDriver 경로 기본값
 
@@ -31,11 +31,12 @@ def setup_selenium():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
-    options.binary_location = CHROME_PATH  # 사용자 지정 Chrome 경로 설정
+    options.binary_location = CHROME_PATH  # Chrome 설치 경로 설정
 
-    # ChromeDriver 경로를 명시적으로 설정
+    # ChromeDriver 설치 경로 명시적 설정
     service = Service(CHROMEDRIVER_PATH)
     service.start()
+
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
