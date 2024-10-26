@@ -1,6 +1,5 @@
 streamlit
 beautifulsoup4
-aiohttp
 requests
 fpdf
 selenium
