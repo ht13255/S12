@@ -8,38 +8,63 @@ from fpdf import FPDF
 import json
 import hashlib
 from urllib.parse import urljoin
+import random
+import time
 
 # 광고 및 구독 링크의 필터링 기준 설정
 FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register"]
+
+# 일반 브라우저와 유사한 User-Agent 목록
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/80.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
+]
 
 def filter_links(links):
     """광고 및 구독 링크를 필터링"""
     return [link for link in links if not any(keyword in link for keyword in FILTER_KEYWORDS)]
 
-async def fetch_content(url):
+async def fetch_content(url, retries=3):
     """해당 URL의 HTML을 가져와 파싱 및 텍스트, 이미지 크롤링"""
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # 모든 텍스트 수집
-                text_content = "\n".join([element.get_text() for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
-                
-                # 이미지 링크 수집
-                images = [img['src'] for img in soup.find_all("img") if 'src' in img.attrs]
-                return text_content, images
+    headers = {"User-Agent": random.choice(USER_AGENTS)}  # 무작위 User-Agent 설정
 
-    except Exception as e:
-        st.error(f"{url} 크롤링 중 오류 발생: {e}")
-        return None, None
+    for attempt in range(retries):
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        raise Exception(f"Failed to fetch {url} with status code {response.status}")
+                    
+                    html = await response.text()
+                    soup = BeautifulSoup(html, 'html.parser')
+                    
+                    # 모든 텍스트 수집
+                    text_content = "\n".join([element.get_text() for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
+                    
+                    # 이미지 링크 수집
+                    images = [img['src'] for img in soup.find_all("img") if 'src' in img.attrs]
+                    return text_content, images
+
+        except Exception as e:
+            if attempt < retries - 1:
+                wait_time = random.uniform(1, 3)  # 대기 시간 추가
+                time.sleep(wait_time)
+            else:
+                st.error(f"{url} 크롤링 중 오류 발생: {e}")
+                return None, None
 
 async def fetch_main_page_links(url):
     """메인 페이지에서 모든 링크를 가져옴"""
+    headers = {"User-Agent": random.choice(USER_AGENTS)}  # 무작위 User-Agent 설정
+
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(url) as response:
+                if response.status != 200:
+                    raise Exception(f"Failed to fetch main page with status code {response.status}")
+
                 html = await response.text()
                 soup = BeautifulSoup(html, 'html.parser')
                 
