@@ -21,23 +21,18 @@ url_input = st.text_area("크롤링할 블로그 URL을 입력하세요 (줄바�
 urls = [url.strip() for url in url_input.splitlines() if url.strip()]
 
 def setup_selenium():
-    # Headless Chrome 설정
+    # Chrome 옵션 설정
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
+    options.binary_location = "/usr/bin/chromium-browser"  # Docker 또는 특정 환경에서의 Chrome 위치
 
-    # Chrome 경로 설정
-    options.binary_location = "/usr/bin/google-chrome"  # Docker 또는 특정 환경에서 Chrome 위치 설정
-
-    # 드라이버 설치 및 경로 지정
+    # 드라이버 설치 및 실행
     driver_path = ChromeDriverManager().install()
     service = Service(driver_path)
-    service.command_line_args()
     service.start()
-
-    # Selenium 드라이버 실행
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
