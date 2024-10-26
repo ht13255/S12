@@ -83,7 +83,7 @@ def get_unique_hash(text, images):
     return hashlib.md5(combined_content.encode()).hexdigest()
 
 async def scrape_all_links(url):
-    """메인 페이지에서 모든 링크를 가져와 비동기로 크롤링"""
+    """메인 페이지에서 모든 링크를 가져와 각 링크에 직접 접속하여 콘텐츠 크롤링"""
     links = await fetch_main_page_links(url)
     tasks = [fetch_content(link if link.startswith("http") else url + link) for link in links]
     results = await asyncio.gather(*tasks)
