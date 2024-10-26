@@ -1,4 +1,5 @@
 streamlit
-requests
 beautifulsoup4
-weasyprint
+requests-html
+fpdf
+concurrent-log-handler
