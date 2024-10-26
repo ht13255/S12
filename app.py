@@ -2,18 +2,11 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-import pdfkit
+from fpdf import FPDF
 import json
 import streamlit as st
 from urllib.parse import urljoin
 import os
-
-# wkhtmltopdf 경로 설정
-# 로컬 실행 시에는 시스템 경로를 사용하고, GitHub에서는 특정 경로로 설정할 수 있도록 합니다.
-if os.path.exists("/usr/local/bin/wkhtmltopdf"):
-    pdfkit_config = pdfkit.configuration(wkhtmltopdf="/usr/local/bin/wkhtmltopdf")
-else:
-    pdfkit_config = None  # 로컬 환경에서 wkhtmltopdf가 PATH에 있을 경우 사용
 
 # URL 분석 후 규칙을 설정하여 링크를 추출하는 함수
 def analyze_and_get_links(base_url):
@@ -55,10 +48,18 @@ def fetch_article_content(url):
     
     return content
 
-# PDF로 저장
+# FPDF로 PDF 파일 저장
 def save_to_pdf(content, output_path):
-    # wkhtmltopdf 경로가 지정된 경우에만 config 인자를 전달합니다.
-    pdfkit.from_string(content, output_path, configuration=pdfkit_config)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Arial", size=12)
+
+    # 긴 텍스트를 여러 줄로 나눠서 PDF에 추가
+    for line in content.split("\n"):
+        pdf.cell(200, 10, txt=line, ln=True)
+    
+    pdf.output(output_path)
 
 # CSV 또는 JSON으로 저장
 def save_to_ml_file(data, output_path, format="csv"):
@@ -100,9 +101,8 @@ def main():
 
 # requirements.txt 파일 생성
 with open("requirements.txt", "w") as f:
-    f.write("requests\nbeautifulsoup4\npandas\npdfkit\nstreamlit\n")
+    f.write("requests\nbeautifulsoup4\npandas\nfpdf\nstreamlit\n")
 
 # Streamlit 앱 실행
 if __name__ == "__main__":
     main()
-
