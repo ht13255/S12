@@ -8,12 +8,13 @@ from urllib.parse import urljoin
 import os
 import re
 
-# 모든 페이지를 탐색하여 기사 링크를 수집하는 함수
+# 모든 페이지의 기사 링크를 추출하는 함수
 def get_all_article_links(base_url, session):
     all_links = []
     next_page_url = base_url
 
     while next_page_url:
+        # 현재 페이지 요청
         response = session.get(next_page_url)
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -28,7 +29,7 @@ def get_all_article_links(base_url, session):
         all_links.extend(page_links)
 
         # 다음 페이지 URL 찾기
-        next_page = soup.find("a", string="Next") or soup.find("a", string="다음")  # "Next"나 "다음"을 기반으로 페이지를 넘김
+        next_page = soup.find("a", string="Next") or soup.find("a", string="다음")
         next_page_url = urljoin(base_url, next_page['href']) if next_page else None
 
     return list(set(all_links))  # 중복 링크 제거
