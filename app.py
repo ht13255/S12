@@ -4,11 +4,26 @@ from bs4 import BeautifulSoup
 import json
 import tempfile
 import os
-from weasyprint import HTML
+from weasyprint import HTML, CSS
+from weasyprint.text import fonts
 
 # Streamlit 앱 제목
 st.title("웹 페이지 크롤러 (텍스트와 이미지 포함)")
 st.write("URL을 입력하여 모든 링크에 접속하고 페이지 내용을 PDF와 JSON으로 저장합니다.")
+
+# Pango 설치 확인
+try:
+    fonts.find_font("Pango")
+except OSError:
+    st.error(
+        "Pango 라이브러리를 찾을 수 없습니다. "
+        "Pango는 WeasyPrint에서 PDF 생성을 위해 필요합니다. "
+        "운영체제에 맞게 설치해 주세요:\n\n"
+        "- **Linux**: `sudo apt install -y libpango-1.0-0`\n"
+        "- **macOS**: `brew install pango`\n"
+        "- **Windows**: [GTK+ for Windows 설치](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) 후 PATH 환경 변수에 GTK 설치 경로 추가"
+    )
+    st.stop()
 
 # URL 입력
 url = st.text_input("URL을 입력하세요:", "https://www.web2pdfconvert.com/")
@@ -17,7 +32,7 @@ if url:
     try:
         # 기본 페이지 요청
         response = requests.get(url)
-        response.raise_for_status()  # 요청 실패 시 오류 발생
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # 페이지 제목 및 모든 링크 수집
@@ -37,14 +52,14 @@ if url:
 
             # 각 링크에 접근하여 콘텐츠 추출 및 변환
             for text, link in content_links.items():
-                full_link = link if link.startswith("http") else url + link  # 상대 링크 처리
+                full_link = link if link.startswith("http") else url + link
                 try:
                     sub_response = requests.get(full_link)
                     sub_response.raise_for_status()
                     sub_soup = BeautifulSoup(sub_response.text, 'html.parser')
 
                     # HTML 형식의 내용과 이미지 URL을 포함한 텍스트 추출
-                    page_content = str(sub_soup)  # HTML 전체 내용 그대로 저장
+                    page_content = str(sub_soup)
                     images = [img['src'] if img['src'].startswith("http") else url + img['src'] for img in sub_soup.find_all("img") if img.get('src')]
 
                     # JSON 데이터에 추가
@@ -56,7 +71,7 @@ if url:
 
                     # PDF 파일로 저장
                     pdf_file_path = os.path.join(temp_dir, f"{text[:50]}.pdf")
-                    HTML(string=page_content).write_pdf(pdf_file_path)  # HTML 콘텐츠를 PDF로 변환
+                    HTML(string=page_content).write_pdf(pdf_file_path)
                     pdf_files.append(pdf_file_path)
                     st.write(f"{pdf_file_path} 파일로 저장 완료")
 
