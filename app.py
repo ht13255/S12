@@ -9,12 +9,12 @@ import os
 import re
 
 # 모든 페이지의 링크를 추출하는 함수
-def get_all_links(base_url):
+def get_all_links(base_url, session):
     links = []
     next_page_url = base_url
 
     while next_page_url:
-        response = requests.get(next_page_url)
+        response = session.get(next_page_url)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # 현재 페이지의 기사 링크 추출
@@ -34,8 +34,8 @@ def get_all_links(base_url):
     return list(set(links))  # 중복 링크 제거
 
 # 기사 본문 추출 함수
-def fetch_article_content(url):
-    response = requests.get(url)
+def fetch_article_content(url, session):
+    response = session.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
     
     # 기사 본문 찾기
@@ -43,53 +43,51 @@ def fetch_article_content(url):
     content = "\n".join([para.get_text() for para in paragraphs])
     return content
 
-# 안전한 파일 이름 생성 함수
-def safe_filename(url):
-    filename = url.split("/")[-1] or "article"
-    filename = re.sub(r'\W+', '_', filename)  # 알파벳, 숫자, 밑줄만 허용
-    return f"{filename}.pdf"
-
 # PDF 파일 저장 (UTF-8 지원)
-def save_to_pdf(content, output_path):
+def save_to_pdf(contents, output_path):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Arial", size=12)
 
-    # UTF-8 인코딩 설정 후 텍스트 줄 단위로 PDF에 추가
-    for line in content.split("\n"):
-        pdf.cell(200, 10, txt=line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
-    
+    # 모든 기사 내용을 PDF에 추가
+    for content in contents:
+        for line in content.split("\n"):
+            pdf.cell(200, 10, txt=line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
+        pdf.ln(10)  # 기사 간 간격 추가
+
     pdf.output(output_path)
 
 # Streamlit 앱
 def main():
-    st.title("웹 스크래퍼")
+    st.title("웹 스크래퍼 (하나의 PDF로 저장)")
 
     # URL 입력 받기
     base_url = st.text_input("분석할 웹사이트의 URL을 입력하세요", value="https://learning.coachesvoice.com/category/analysis/")
     if st.button("크롤링 시작"):
         st.write(f"{base_url}에서 모든 페이지의 링크를 분석 중입니다.")
         
+        # 세션을 통한 쿠키 우회 설정
+        session = requests.Session()
+        session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"})
+        
         # 모든 페이지의 링크 분석 및 추출
-        links = get_all_links(base_url)
+        links = get_all_links(base_url, session)
         st.write(f"{len(links)}개의 유효한 기사를 찾았습니다.")
         
         # 기사 내용 수집
         data = []
-        pdf_files = []
+        contents = []
         
-        for i, link in enumerate(links):
-            content = fetch_article_content(link)
+        for link in links:
+            content = fetch_article_content(link, session)
             data.append({"url": link, "content": content})
-            
-            # PDF로 저장
-            pdf_filename = safe_filename(link)
-            pdf_path = f"articles/{pdf_filename}"
-            os.makedirs("articles", exist_ok=True)  # articles 디렉토리 생성
-            save_to_pdf(content, pdf_path)
-            pdf_files.append(pdf_path)
+            contents.append(content)  # PDF로 결합할 내용 저장
         
+        # 모든 기사 내용을 하나의 PDF로 저장
+        pdf_path = "all_articles.pdf"
+        save_to_pdf(contents, pdf_path)
+
         # CSV로 저장
         csv_path = "articles.csv"
         pd.DataFrame(data).to_csv(csv_path, index=False)
@@ -98,11 +96,9 @@ def main():
         st.write("다운로드 옵션:")
         with open(csv_path, "rb") as f:
             st.download_button("CSV 파일 다운로드", f, file_name="articles.csv")
-        
-        # 각 PDF 파일에 고유한 key를 지정해 다운로드 버튼 제공
-        for i, pdf_file in enumerate(pdf_files):
-            with open(pdf_file, "rb") as f:
-                st.download_button(f"{pdf_file} 다운로드", f, file_name=pdf_file, key=f"download_{i}")
+
+        with open(pdf_path, "rb") as f:
+            st.download_button("전체 PDF 파일 다운로드", f, file_name="all_articles.pdf")
 
 # requirements.txt 파일 생성
 with open("requirements.txt", "w") as f:
