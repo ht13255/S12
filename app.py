@@ -7,6 +7,7 @@ import json
 import streamlit as st
 from urllib.parse import urljoin
 import os
+import re
 
 # URL 분석 후 규칙을 설정하여 링크를 추출하는 함수
 def analyze_and_get_links(base_url):
@@ -48,6 +49,13 @@ def fetch_article_content(url):
     
     return content
 
+# 안전한 파일 이름 생성 함수
+def safe_filename(url):
+    # URL에서 파일명 부분 추출하고, 알파벳, 숫자, 밑줄만 남기기
+    filename = url.split("/")[-1] or "article"
+    filename = re.sub(r'\W+', '_', filename)
+    return f"{filename}.pdf"
+
 # FPDF로 PDF 파일 저장
 def save_to_pdf(content, output_path):
     pdf = FPDF()
@@ -88,8 +96,11 @@ def main():
             content = fetch_article_content(link)
             data.append({"url": link, "content": content})
             
+            # 안전한 파일 이름 생성
+            pdf_path = f"articles/{safe_filename(link)}"
+            os.makedirs(os.path.dirname(pdf_path), exist_ok=True)  # 디렉토리 생성
+            
             # PDF로 각 기사를 저장
-            pdf_path = f"articles/{link.split('/')[-1]}.pdf"
             save_to_pdf(content, pdf_path)
         
         # 다운로드 옵션 제공
