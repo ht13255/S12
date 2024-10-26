@@ -44,6 +44,8 @@ async def fetch_main_page_links(url):
                 
                 # 모든 링크 가져오기
                 links = [a['href'] for a in soup.find_all('a', href=True)]
+                # 상대 링크를 절대 링크로 변환
+                links = [link if link.startswith("http") else url + link for link in links]
                 return filter_links(links)
 
     except Exception as e:
@@ -85,7 +87,7 @@ def get_unique_hash(text, images):
 async def scrape_all_links(url):
     """메인 페이지에서 모든 링크를 가져와 각 링크에 직접 접속하여 콘텐츠 크롤링"""
     links = await fetch_main_page_links(url)
-    tasks = [fetch_content(link if link.startswith("http") else url + link) for link in links]
+    tasks = [fetch_content(link) for link in links]
     results = await asyncio.gather(*tasks)
     
     unique_pages = set()
