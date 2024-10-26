@@ -1,5 +1,3 @@
-# 파일명: streamlit_app.py
-
 import streamlit as st
 from bs4 import BeautifulSoup
 from requests_html import HTMLSession
@@ -8,6 +6,7 @@ import json
 import concurrent.futures
 import hashlib
 import time
+import asyncio
 
 # 광고 및 구독 링크의 필터링 기준 설정
 FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register"]
@@ -24,7 +23,15 @@ def scrape_content(url, retries=3):
     for attempt in range(retries):
         try:
             response = session.get(url)
-            response.html.render(timeout=20)
+
+            # 이벤트 루프 생성 또는 기존 이벤트 루프 사용
+            if not asyncio.get_event_loop().is_running():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                response.html.render(timeout=20)
+            else:
+                response.html.render(timeout=20)
+
             soup = BeautifulSoup(response.html.html, 'html.parser')
             
             # 텍스트 수집
