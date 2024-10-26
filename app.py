@@ -32,7 +32,6 @@ def setup_selenium():
     # 드라이버 설치 및 실행
     driver_path = ChromeDriverManager().install()
     service = Service(driver_path)
-    service.start()
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
