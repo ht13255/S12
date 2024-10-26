@@ -11,7 +11,7 @@ from urllib.parse import urljoin
 import random
 import time
 
-# 광고 및 구독 링크의 필터링 기준 설정
+# 광고, 구독, 인스타그램 링크의 필터링 기준 설정
 FILTER_KEYWORDS = ["ads", "advertisement", "subscribe", "login", "register", "instagram"]
 
 # 일반 브라우저와 유사한 User-Agent 목록
@@ -23,7 +23,7 @@ USER_AGENTS = [
 ]
 
 def filter_links(links):
-    """광고 및 구독 링크를 필터링"""
+    """광고, 구독, 인스타그램 링크를 필터링"""
     return [link for link in links if not any(keyword in link for keyword in FILTER_KEYWORDS)]
 
 async def fetch_content(url, retries=3):
@@ -128,7 +128,7 @@ async def scrape_all_links(url):
     return scraped_data
 
 st.title("웹사이트 콘텐츠 크롤러")
-st.write("특정 웹사이트의 모든 링크에서 광고 및 구독 링크를 제외한 콘텐츠를 크롤링합니다.")
+st.write("특정 웹사이트의 모든 링크에서 광고, 구독 및 인스타그램 링크를 제외한 콘텐츠를 크롤링합니다.")
 
 url = st.text_input("웹사이트 URL을 입력하세요:")
 if st.button("크롤링 시작"):
@@ -150,3 +150,4 @@ if st.button("크롤링 시작"):
             st.error(f"크롤링에 실패했습니다: {e}")
     else:
         st.warning("유효한 URL을 입력하세요.")
+
