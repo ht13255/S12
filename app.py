@@ -49,16 +49,16 @@ def safe_filename(url):
     filename = re.sub(r'\W+', '_', filename)  # 알파벳, 숫자, 밑줄만 허용
     return f"{filename}.pdf"
 
-# PDF 파일 저장
+# PDF 파일 저장 (UTF-8 지원)
 def save_to_pdf(content, output_path):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Arial", size=12)
-    
-    # 텍스트 줄 단위로 PDF에 추가
+
+    # UTF-8 인코딩 설정 후 텍스트 줄 단위로 PDF에 추가
     for line in content.split("\n"):
-        pdf.cell(200, 10, txt=line, ln=True)
+        pdf.cell(200, 10, txt=line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
     
     pdf.output(output_path)
 
@@ -106,7 +106,7 @@ def main():
 
 # requirements.txt 파일 생성
 with open("requirements.txt", "w") as f:
-    f.write("requests\nbeautifulsoup4\npandas\nfpdf\nstreamlit\n")
+    f.write("requests\nbeautifulsoup4\npandas\nfpdf2\nstreamlit\n")
 
 # Streamlit 앱 실행
 if __name__ == "__main__":
