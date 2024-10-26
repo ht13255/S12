@@ -10,15 +10,25 @@ import os
 st.title("웹 페이지 크롤러 (텍스트와 이미지 포함)")
 st.write("URL을 입력하여 모든 링크에 접속하고 페이지 내용을 PDF와 JSON으로 저장합니다.")
 
-# wkhtmltopdf 경로 설정 - 시스템에 맞게 자동 감지 또는 사용자 지정
+# wkhtmltopdf 경로 설정 - 시스템에 맞게 자동 감지 또는 환경 변수 사용 안내
 def get_wkhtmltopdf_path():
-    # Ubuntu 및 macOS에서의 경로 확인
+    # 환경 변수에서 경로 확인
+    wkhtmltopdf_path = os.getenv("WKHTMLTOPDF_PATH")
+    if wkhtmltopdf_path and os.path.exists(wkhtmltopdf_path):
+        return wkhtmltopdf_path
+    
+    # 일반적인 시스템 경로 확인 (Ubuntu 및 macOS)
     paths = ["/usr/local/bin/wkhtmltopdf", "/usr/bin/wkhtmltopdf"]
     for path in paths:
         if os.path.exists(path):
             return path
-    # Windows 사용자는 직접 경로를 지정할 수 있도록 안내
-    st.warning("wkhtmltopdf 경로를 찾을 수 없습니다. Windows 사용자는 'C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe' 경로를 확인 후 지정해야 합니다.")
+
+    # 경로가 없는 경우 안내 메시지
+    st.warning(
+        "wkhtmltopdf 경로를 찾을 수 없습니다. "
+        "환경 변수 'WKHTMLTOPDF_PATH'에 wkhtmltopdf 설치 경로를 설정하고 다시 실행하세요. "
+        "Windows 사용자는 'C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe' 경로를 지정할 수 있습니다."
+    )
     return None
 
 # 경로 설정 함수 호출
