@@ -1,5 +1,6 @@
+# requirements.txt
 requests
 beautifulsoup4
 pandas
-pdfkit
+fpdf
 streamlit
