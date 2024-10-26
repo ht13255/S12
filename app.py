@@ -29,19 +29,17 @@ url_input = st.text_area("크롤링할 블로그 URL을 입력하세요 (줄바�
 urls = [url.strip() for url in url_input.splitlines() if url.strip()]
 
 def setup_selenium():
-    # Chrome 옵션 설정
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
-    options.binary_location = CHROME_PATH  # 사용자 지정 Chrome 경로 설정
+    options.binary_location = "/usr/bin/chromium-browser"  # Chrome 설치 경로
 
-    # 드라이버 설치 및 실행
-    driver_path = ChromeDriverManager().install()
-    service = Service(driver_path)
-    driver = webdriver.Chrome(service=service, options=options)
+    # ChromeDriver의 경로 명시적 지정
+    driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
     return driver
+
 
 def capture_full_page(driver, url, output_folder, page_index):
     driver.get(url)
