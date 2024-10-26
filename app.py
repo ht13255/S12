@@ -56,12 +56,12 @@ def create_pdf(content):
     
     for page, (text, images) in enumerate(content):
         pdf.cell(200, 10, txt=f"Page {page + 1}", ln=True)
-        pdf.multi_cell(0, 10, text)
+        pdf.multi_cell(0, 10, text.encode('latin-1', 'replace').decode('latin-1'))  # UTF-8 문자를 대체하여 처리
         pdf.ln(10)
         
         # 이미지 추가
         for img_url in images:
-            pdf.cell(0, 10, img_url, ln=True)
+            pdf.cell(0, 10, img_url.encode('latin-1', 'replace').decode('latin-1'), ln=True)
             pdf.ln(10)
             
     pdf_output = "scraped_content.pdf"
