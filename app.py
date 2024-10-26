@@ -1,6 +1,7 @@
 import os
 import asyncio
 import aiohttp
+import requests  # requests 모듈 추가
 import json
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
