@@ -1,110 +1,104 @@
-# /web_scraper_app.py
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-from fpdf import FPDF
 import streamlit as st
-from urllib.parse import urljoin
-import os
-import re
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+import pandas as pd
+import time
 
-# 모든 페이지의 기사 링크를 추출하는 함수
-def get_all_article_links(base_url, session):
-    all_links = []
-    next_page_url = base_url
+# 크롬 드라이버 옵션 설정
+def init_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # 브라우저 창 숨김
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    return webdriver.Chrome(options=options)
 
-    while next_page_url:
-        # 현재 페이지 요청
-        response = session.get(next_page_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 현재 페이지의 모든 기사 링크 수집
-        page_links = [a['href'] for a in soup.select('a[href]') if 'href' in a.attrs]
-        page_links = [urljoin(base_url, link) for link in page_links if link.startswith('/') or link.startswith(base_url)]
-        
-        # 불필요한 링크 제거
-        unwanted_keywords = ["instagram", "subscribe", "ads", "academy"]
-        page_links = [link for link in page_links if not any(keyword in link for keyword in unwanted_keywords)]
-        
-        all_links.extend(page_links)
+# Sofascore 검색 함수
+def sofascore_search(criteria):
+    driver = init_driver()
+    driver.get("https://www.sofascore.com/")
+    time.sleep(2)
 
-        # 다음 페이지 URL 찾기
-        next_page = soup.find("a", string="Next") or soup.find("a", string="다음")
-        next_page_url = urljoin(base_url, next_page['href']) if next_page else None
+    # 검색
+    search_bar = driver.find_element(By.XPATH, '//input[@placeholder="Search"]')
+    search_bar.send_keys(criteria['name'])
+    search_bar.send_keys(Keys.RETURN)
+    time.sleep(3)
 
-    return list(set(all_links))  # 중복 링크 제거
+    # 선수 데이터 크롤링
+    players_data = []
+    players = driver.find_elements(By.CLASS_NAME, "list-item-class")  # HTML 클래스 확인 필요
+    for player in players:
+        try:
+            name = player.find_element(By.CLASS_NAME, "player-name-class").text
+            position = player.find_element(By.CLASS_NAME, "player-position-class").text
+            nationality = player.find_element(By.CLASS_NAME, "player-nationality-class").text
+            players_data.append({"Name": name, "Position": position, "Nationality": nationality})
+        except Exception as e:
+            print(f"Error extracting player data: {e}")
 
-# 각 기사 본문을 추출하는 함수
-def fetch_article_content(url, session):
-    response = session.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # 기사 본문 찾기
-    paragraphs = soup.find_all("p")
-    content = "\n".join([para.get_text() for para in paragraphs])
-    return content
+    driver.quit()
+    return players_data
 
-# PDF 파일 저장 (UTF-8 지원)
-def save_to_pdf(contents, output_path):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Arial", size=12)
+# Transfermarkt 몸값 크롤링 함수
+def transfermarkt_value(player_name):
+    driver = init_driver()
+    driver.get("https://www.transfermarkt.com/")
+    time.sleep(2)
 
-    # 모든 기사 내용을 PDF에 추가
-    for content in contents:
-        for line in content.split("\n"):
-            pdf.cell(200, 10, txt=line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
-        pdf.ln(10)  # 기사 간 간격 추가
+    # 검색
+    search_bar = driver.find_element(By.ID, "tm-header-search-input")
+    search_bar.send_keys(player_name)
+    search_bar.send_keys(Keys.RETURN)
+    time.sleep(3)
 
-    pdf.output(output_path)
+    # 몸값 추출
+    try:
+        market_value = driver.find_element(By.CLASS_NAME, "data-header__market-value").text
+    except Exception:
+        market_value = "N/A"
 
-# Streamlit 앱
+    driver.quit()
+    return market_value
+
+# Streamlit UI
 def main():
-    st.title("웹 스크래퍼 (모든 페이지 크롤링)")
+    st.title("Sofascore 및 Transfermarkt 크롤링")
 
-    # URL 입력 받기
-    base_url = st.text_input("분석할 웹사이트의 URL을 입력하세요", value="https://learning.coachesvoice.com/category/analysis/")
-    if st.button("크롤링 시작"):
-        st.write(f"{base_url}에서 모든 페이지의 링크를 분석 중입니다.")
-        
-        # 세션을 통한 쿠키 우회 설정
-        session = requests.Session()
-        session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"})
-        
-        # 모든 페이지의 링크 분석 및 추출
-        article_links = get_all_article_links(base_url, session)
-        st.write(f"{len(article_links)}개의 유효한 기사를 찾았습니다.")
-        
-        # 기사 내용 수집
-        data = []
-        contents = []
-        
-        for link in article_links:
-            content = fetch_article_content(link, session)
-            data.append({"url": link, "content": content})
-            contents.append(content)  # PDF로 결합할 내용 저장
-        
-        # 모든 기사 내용을 하나의 PDF로 저장
-        pdf_path = "all_articles.pdf"
-        save_to_pdf(contents, pdf_path)
+    # 입력 폼
+    st.sidebar.header("검색 조건")
+    name = st.sidebar.text_input("선수 이름", "Messi")
+    position = st.sidebar.text_input("포지션", "FW")
+    age = st.sidebar.number_input("나이", min_value=15, max_value=50, value=30)
 
-        # CSV로 저장
-        csv_path = "articles.csv"
-        pd.DataFrame(data).to_csv(csv_path, index=False)
+    criteria = {"name": name, "position": position, "age": age}
 
-        # 다운로드 링크 제공
-        st.write("다운로드 옵션:")
-        with open(csv_path, "rb") as f:
-            st.download_button("CSV 파일 다운로드", f, file_name="articles.csv")
+    if st.sidebar.button("크롤링 시작"):
+        st.write("Sofascore에서 선수 정보 검색 중...")
+        players = sofascore_search(criteria)
 
-        with open(pdf_path, "rb") as f:
-            st.download_button("전체 PDF 파일 다운로드", f, file_name="all_articles.pdf")
+        st.write("Transfermarkt에서 선수 몸값 가져오는 중...")
+        for player in players:
+            player['Market Value'] = transfermarkt_value(player['Name'])
 
-# requirements.txt 파일 생성
-with open("requirements.txt", "w") as f:
-    f.write("requests\nbeautifulsoup4\npandas\nfpdf\nstreamlit\n")
+        # 데이터프레임 생성
+        df = pd.DataFrame(players)
+        st.dataframe(df)
 
-# Streamlit 앱 실행
+        # 엑셀 파일로 저장
+        @st.cache_data
+        def convert_df_to_excel(dataframe):
+            return dataframe.to_excel(index=False, engine='openpyxl')
+
+        excel_file = convert_df_to_excel(df)
+
+        # 다운로드 버튼
+        st.download_button(
+            label="엑셀 파일 다운로드",
+            data=excel_file,
+            file_name="players_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
 if __name__ == "__main__":
     main()
