@@ -1,6 +1,4 @@
-# requirements.txt
-requests
-beautifulsoup4
-pandas
-fpdf2
 streamlit
+selenium
+pandas
+openpyxl
