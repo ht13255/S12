@@ -1,137 +1,137 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 import pandas as pd
-import time
+import matplotlib.pyplot as plt
+from statsbombpy import sb
+from fpdf import FPDF
+from io import BytesIO
 
-# 크롬 드라이버 설정 함수
-def init_driver():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(options=options)
+# Streamlit 설정
+st.title("StatsBomb 선수 분석 대시보드")
 
-# Sofascore에서 선수 정보를 검색하는 함수
-def sofascore_search(criteria):
-    driver = init_driver()
-    driver.get("https://www.sofascore.com/")
-    time.sleep(2)
+# 대회 데이터 로드
+st.sidebar.header("설정")
+competitions = sb.competitions()
+competition_names = competitions["competition_name"].unique()
+selected_competition = st.sidebar.selectbox("대회 선택", competition_names)
 
-    # 검색창 입력
-    search_bar = driver.find_element(By.XPATH, '//input[@placeholder="Search"]')
-    search_bar.send_keys(criteria['name'])
-    search_bar.send_keys(Keys.RETURN)
-    time.sleep(3)
+# 선택된 대회 필터링
+filtered_competition = competitions[competitions["competition_name"] == selected_competition]
+seasons = filtered_competition["season_name"].unique()
+selected_season = st.sidebar.selectbox("시즌 선택", seasons)
 
-    players_data = []
-    try:
-        players = driver.find_elements(By.CLASS_NAME, "sc-c-text")  # Sofascore HTML 구조 확인 필요
-        for player in players:
-            try:
-                name = player.find_element(By.CLASS_NAME, "sc-c-player-name").text
-                position = player.find_element(By.CLASS_NAME, "sc-c-player-position").text
-                nationality = player.find_element(By.CLASS_NAME, "sc-c-player-nationality").text
-                matches_played = int(player.find_element(By.CLASS_NAME, "sc-c-matches-played").text)
-                preferred_foot = player.find_element(By.CLASS_NAME, "sc-c-preferred-foot").text
+# 선택된 시즌에 해당하는 경기 로드
+competition_id = filtered_competition[filtered_competition["season_name"] == selected_season]["competition_id"].values[0]
+season_id = filtered_competition[filtered_competition["season_name"] == selected_season]["season_id"].values[0]
+matches = sb.matches(competition_id=competition_id, season_id=season_id)
 
-                # 조건 필터링
-                if criteria['position'] and criteria['position'] not in position:
-                    continue
-                if criteria['nationality'] and criteria['nationality'] not in nationality:
-                    continue
-                if criteria['min_matches'] and matches_played < criteria['min_matches']:
-                    continue
-                if criteria['preferred_foot'] and criteria['preferred_foot'] not in preferred_foot:
-                    continue
+# 경기 선택
+match_titles = matches["home_team"] + " vs " + matches["away_team"]
+selected_match = st.sidebar.selectbox("경기 선택", match_titles)
 
-                players_data.append({
-                    "Name": name,
-                    "Position": position,
-                    "Nationality": nationality,
-                    "Matches Played": matches_played,
-                    "Preferred Foot": preferred_foot
-                })
-            except Exception as e:
-                st.warning(f"선수 데이터를 처리하는 중 오류 발생: {e}")
+# 선택된 경기 데이터 로드
+selected_match_id = matches[matches["home_team"] + " vs " + matches["away_team"] == selected_match]["match_id"].values[0]
+events = sb.events(match_id=selected_match_id)
 
-    except Exception as e:
-        st.error(f"Sofascore 데이터를 가져오는 중 오류 발생: {e}")
+# 선수 이름 선택
+players = events["player"].dropna().unique()
+selected_player = st.sidebar.selectbox("선수 선택", players)
 
-    driver.quit()
-    return players_data
+# 선택된 선수 데이터 필터링
+player_data = events[events["player"] == selected_player]
 
-# Transfermarkt에서 선수 몸값 검색
-def transfermarkt_value(player_name):
-    driver = init_driver()
-    driver.get("https://www.transfermarkt.com/")
-    time.sleep(2)
+# 섹션: 선수 데이터 요약
+st.header(f"{selected_player} 데이터 요약")
+st.write(f"경기 이벤트 데이터 수: {len(player_data)}")
+st.write(player_data[["type", "minute", "location"]].head(10))
 
-    try:
-        search_bar = driver.find_element(By.ID, "tm-header-search-input")
-        search_bar.send_keys(player_name)
-        search_bar.send_keys(Keys.RETURN)
-        time.sleep(3)
-        market_value = driver.find_element(By.CLASS_NAME, "data-header__market-value").text
-    except Exception:
-        market_value = "N/A"
+# 패스 데이터 시각화
+st.subheader("패스 분포 시각화")
+pass_data = player_data[player_data["type"] == "Pass"]
+pass_fig, pass_ax = plt.subplots()
+if len(pass_data) > 0:
+    for _, row in pass_data.iterrows():
+        if isinstance(row["pass_end_location"], list):
+            pass_ax.plot(
+                [row["location"][0], row["pass_end_location"][0]],
+                [row["location"][1], row["pass_end_location"][1]],
+                color="blue",
+                alpha=0.6,
+                linewidth=1,
+            )
+    pass_ax.set_title(f"{selected_player}의 패스 분포")
+    pass_ax.set_xlim([0, 120])
+    pass_ax.set_ylim([0, 80])
+    pass_ax.set_xlabel("X 좌표")
+    pass_ax.set_ylabel("Y 좌표")
+    st.pyplot(pass_fig)
+else:
+    st.write("패스 데이터가 없습니다.")
 
-    driver.quit()
-    return market_value
-
-# Streamlit UI
-def main():
-    st.title("축구 선수 크롤링 - Sofascore & Transfermarkt")
-
-    st.sidebar.header("검색 조건")
-    name = st.sidebar.text_input("선수 이름", "")
-    position = st.sidebar.selectbox(
-        "포지션",
-        options=[
-            "", "ST", "LW", "RW", "CM", "CAM", "CDM", "LM", "RM", 
-            "CB", "LB", "RB", "LWB", "RWB", "GK"
-        ]
+# 슈팅 데이터 시각화
+st.subheader("슈팅 데이터 시각화")
+shot_data = player_data[player_data["type"] == "Shot"]
+shot_fig, shot_ax = plt.subplots()
+if len(shot_data) > 0:
+    shot_ax.scatter(
+        [loc[0] for loc in shot_data["location"]],
+        [loc[1] for loc in shot_data["location"]],
+        c="red",
+        label="Shot",
     )
-    nationality = st.sidebar.text_input("국적 (예: Brazil, Germany)", "")
-    min_age = st.sidebar.number_input("최소 나이", min_value=0, max_value=50, value=0)
-    max_age = st.sidebar.number_input("최대 나이", min_value=0, max_value=50, value=50)
-    min_matches = st.sidebar.number_input("최소 경기 수", min_value=0, value=0)
-    preferred_foot = st.sidebar.selectbox("주발", options=["", "Right", "Left"])
+    shot_ax.set_title(f"{selected_player}의 슈팅 위치")
+    shot_ax.set_xlim([0, 120])
+    shot_ax.set_ylim([0, 80])
+    shot_ax.set_xlabel("X 좌표")
+    shot_ax.set_ylabel("Y 좌표")
+    shot_ax.legend()
+    st.pyplot(shot_fig)
+else:
+    st.write("슈팅 데이터가 없습니다.")
 
-    criteria = {
-        "name": name,
-        "position": position,
-        "nationality": nationality,
-        "min_age": min_age,
-        "max_age": max_age,
-        "min_matches": min_matches,
-        "preferred_foot": preferred_foot
-    }
+# PDF 생성 함수
+def create_pdf(player_name, pass_fig, shot_fig, player_summary):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
 
-    if st.sidebar.button("크롤링 시작"):
-        st.write("Sofascore에서 데이터 가져오는 중...")
-        players = sofascore_search(criteria)
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"{player_name} 분석 결과", ln=True, align="C")
 
-        st.write("Transfermarkt에서 선수 몸값 가져오는 중...")
-        for player in players:
-            player['Market Value'] = transfermarkt_value(player['Name'])
+    # 선수 데이터 요약
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 10, txt=player_summary)
 
-        df = pd.DataFrame(players)
+    # 패스 이미지 추가
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"{player_name} 패스 분포", ln=True, align="C")
+    pass_img = BytesIO()
+    pass_fig.savefig(pass_img, format="png")
+    pass_img.seek(0)
+    pdf.image(pass_img, x=10, y=30, w=180)
 
-        @st.cache_data
-        def convert_df_to_excel(dataframe):
-            return dataframe.to_excel(index=False, engine='openpyxl')
+    # 슈팅 이미지 추가
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"{player_name} 슈팅 위치", ln=True, align="C")
+    shot_img = BytesIO()
+    shot_fig.savefig(shot_img, format="png")
+    shot_img.seek(0)
+    pdf.image(shot_img, x=10, y=30, w=180)
 
-        excel_file = convert_df_to_excel(df)
+    return pdf
 
-        st.dataframe(df)
-        st.download_button(
-            label="엑셀 파일 다운로드",
-            data=excel_file,
-            file_name="players_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+# PDF 다운로드 버튼
+if st.button("PDF 다운로드"):
+    player_summary = f"경기 이벤트 데이터 수: {len(player_data)}\n"
+    pdf = create_pdf(selected_player, pass_fig, shot_fig, player_summary)
+    pdf_output = BytesIO()
+    pdf.output(pdf_output)
+    pdf_output.seek(0)
 
-if __name__ == "__main__":
-    main()
+    st.download_button(
+        label="PDF 다운로드",
+        data=pdf_output,
+        file_name=f"{selected_player}_분석결과.pdf",
+        mime="application/pdf",
+    )
