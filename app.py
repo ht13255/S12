@@ -1,133 +1,109 @@
 import streamlit as st
+from statsbombpy import sb
 import pandas as pd
 import matplotlib.pyplot as plt
-from statsbombpy import sb
-from fpdf import FPDF
+from matplotlib.patches import Arc
 from io import BytesIO
+from fpdf import FPDF
 
-# Streamlit 앱 제목
-st.title("StatsBomb 선수 분석 대시보드")
-st.sidebar.header("설정")
+# 페이지 설정
+st.set_page_config(page_title="StatsBomb 데이터 분석", layout="wide")
 
-# 대회 데이터 로드
-competitions = sb.competitions()
-competition_names = competitions["competition_name"].unique()
-selected_competition = st.sidebar.selectbox("대회 선택", competition_names)
+# 제목
+st.title("StatsBomb 데이터 분석 도구")
 
-# 선택된 대회와 시즌 필터링
-filtered_competition = competitions[competitions["competition_name"] == selected_competition]
-seasons = filtered_competition["season_name"].unique()
-selected_season = st.sidebar.selectbox("시즌 선택", seasons)
+# 사이드바 옵션
+st.sidebar.header("옵션 선택")
+competition = st.sidebar.selectbox(
+    "리그를 선택하세요:",
+    [comp['competition_name'] for comp in sb.competitions()]
+)
+selected_season = st.sidebar.selectbox(
+    "시즌을 선택하세요:",
+    [season['season_name'] for season in sb.competitions() if season['competition_name'] == competition]
+)
+matches = sb.matches(competition_id=competition, season_id=selected_season)
+match_selection = st.sidebar.selectbox(
+    "경기를 선택하세요:",
+    matches['home_team'] + " vs " + matches['away_team']
+)
 
-competition_id = filtered_competition[filtered_competition["season_name"] == selected_season]["competition_id"].values[0]
-season_id = filtered_competition[filtered_competition["season_name"] == selected_season]["season_id"].values[0]
+# 선택한 경기 데이터 가져오기
+match_id = matches[matches['home_team'] + " vs " + matches['away_team'] == match_selection]['match_id'].iloc[0]
+events = sb.events(match_id=match_id)
 
-# 경기 데이터 로드
-matches = sb.matches(competition_id=competition_id, season_id=season_id)
-match_titles = matches["home_team"] + " vs " + matches["away_team"]
-selected_match = st.sidebar.selectbox("경기 선택", match_titles)
+# 필드 이미지 위에 슈팅 데이터 표시
+def draw_pitch(ax=None):
+    """축구 필드 그리기 함수"""
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 8))
+    ax.set_xlim(0, 120)
+    ax.set_ylim(0, 80)
+    # 필드 외곽
+    plt.plot([0, 0, 120, 120, 0], [0, 80, 80, 0, 0], color="black", lw=2)
+    # 골대
+    plt.plot([0, 0], [30, 50], color="black", lw=2)
+    plt.plot([120, 120], [30, 50], color="black", lw=2)
+    # 페널티 에어리어
+    plt.plot([18, 18], [20, 60], color="black", lw=2)
+    plt.plot([0, 18], [60, 60], color="black", lw=2)
+    plt.plot([0, 18], [20, 20], color="black", lw=2)
+    plt.plot([102, 102], [20, 60], color="black", lw=2)
+    plt.plot([102, 120], [60, 60], color="black", lw=2)
+    plt.plot([102, 120], [20, 20], color="black", lw=2)
+    # 중앙 서클
+    center_circle = Arc((60, 40), 20, 20, angle=0, theta1=0, theta2=360, color="black", lw=2)
+    ax.add_patch(center_circle)
+    return ax
 
-selected_match_id = matches[matches["home_team"] + " vs " + matches["away_team"] == selected_match]["match_id"].values[0]
-events = sb.events(match_id=selected_match_id)
+st.header(f"{competition} {selected_season} - {match_selection}")
+st.write("선택한 경기의 데이터")
 
-# 선수 선택
-players = events["player"].dropna().unique()
-selected_player = st.sidebar.selectbox("선수 선택", players)
+st.subheader("슈팅 데이터 (필드 위 시각화)")
+shots = events[events['type'] == 'Shot']
 
-# 선택된 선수 데이터 필터링
-player_data = events[events["player"] == selected_player]
+fig, ax = plt.subplots(figsize=(12, 8))
+ax = draw_pitch(ax)
+ax.scatter(shots['x'], shots['y'], c='red', label='슈팅 위치', s=100)
+ax.set_title("슈팅 위치 분석")
+ax.legend()
+st.pyplot(fig)
 
-# 데이터 요약 표시
-st.header(f"{selected_player} 데이터 요약")
-st.write(f"경기 이벤트 데이터 수: {len(player_data)}")
-st.write(player_data[["type", "minute", "location"]].head(10))
-
-# 패스 데이터 시각화
-st.subheader("패스 분포")
-pass_data = player_data[player_data["type"] == "Pass"]
-pass_fig, pass_ax = plt.subplots()
-if len(pass_data) > 0:
-    for _, row in pass_data.iterrows():
-        if isinstance(row["pass_end_location"], list):
-            pass_ax.plot(
-                [row["location"][0], row["pass_end_location"][0]],
-                [row["location"][1], row["pass_end_location"][1]],
-                color="blue", alpha=0.6, linewidth=1,
-            )
-    pass_ax.set_title(f"{selected_player}의 패스 분포")
-    pass_ax.set_xlim([0, 120])
-    pass_ax.set_ylim([0, 80])
-    pass_ax.set_xlabel("X 좌표")
-    pass_ax.set_ylabel("Y 좌표")
-    st.pyplot(pass_fig)
-else:
-    st.write("패스 데이터가 없습니다.")
-
-# 슈팅 데이터 시각화
-st.subheader("슈팅 데이터")
-shot_data = player_data[player_data["type"] == "Shot"]
-shot_fig, shot_ax = plt.subplots()
-if len(shot_data) > 0:
-    shot_ax.scatter(
-        [loc[0] for loc in shot_data["location"]],
-        [loc[1] for loc in shot_data["location"]],
-        c="red", label="Shot"
-    )
-    shot_ax.set_title(f"{selected_player}의 슈팅 위치")
-    shot_ax.set_xlim([0, 120])
-    shot_ax.set_ylim([0, 80])
-    shot_ax.set_xlabel("X 좌표")
-    shot_ax.set_ylabel("Y 좌표")
-    shot_ax.legend()
-    st.pyplot(shot_fig)
-else:
-    st.write("슈팅 데이터가 없습니다.")
+# 주요 통계 요약
+st.subheader("통계 요약")
+stats_summary = shots.groupby('team')['shot_outcome'].value_counts().unstack()
+st.write(stats_summary)
 
 # PDF 생성 함수
-def create_pdf(player_name, pass_fig, shot_fig, player_summary):
+def create_pdf(stats_summary, fig):
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-
     pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"{player_name} 분석 결과", ln=True, align="C")
-
-    # 선수 데이터 요약
+    pdf.cell(200, 10, txt="StatsBomb 경기 분석", ln=True, align='C')
+    
+    # 통계 데이터 추가
+    pdf.cell(200, 10, txt="통계 요약", ln=True, align='L')
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 10, txt=player_summary)
-
-    # 패스 이미지 추가
+    for team, stats in stats_summary.iterrows():
+        pdf.cell(200, 10, txt=f"{team}: {stats.to_dict()}", ln=True, align='L')
+    
+    # 필드 이미지 추가
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"{player_name} 패스 분포", ln=True, align="C")
-    pass_img = BytesIO()
-    pass_fig.savefig(pass_img, format="png")
-    pass_img.seek(0)
-    pdf.image(pass_img, x=10, y=30, w=180)
-
-    # 슈팅 이미지 추가
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"{player_name} 슈팅 위치", ln=True, align="C")
-    shot_img = BytesIO()
-    shot_fig.savefig(shot_img, format="png")
-    shot_img.seek(0)
-    pdf.image(shot_img, x=10, y=30, w=180)
-
-    return pdf
+    pdf.cell(200, 10, txt="슈팅 위치 시각화", ln=True, align='C')
+    buf = BytesIO()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+    pdf.image(buf, x=10, y=20, w=180)
+    buf.close()
+    
+    return pdf.output(dest='S').encode('latin1')
 
 # PDF 다운로드 버튼
-st.subheader("PDF 다운로드")
-if st.button("PDF 생성 및 다운로드"):
-    player_summary = f"경기 이벤트 데이터 수: {len(player_data)}\n"
-    pdf = create_pdf(selected_player, pass_fig, shot_fig, player_summary)
-    pdf_output = BytesIO()
-    pdf.output(pdf_output)
-    pdf_output.seek(0)
-
-    st.download_button(
+if st.sidebar.button("PDF 다운로드"):
+    pdf_data = create_pdf(stats_summary, fig)
+    st.sidebar.download_button(
         label="PDF 다운로드",
-        data=pdf_output,
-        file_name=f"{selected_player}_분석결과.pdf",
+        data=pdf_data,
+        file_name="match_analysis.pdf",
         mime="application/pdf",
     )
