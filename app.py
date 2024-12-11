@@ -61,6 +61,18 @@ except Exception as e:
     st.error(f"이벤트 데이터를 로드하는 중 오류가 발생했습니다: {e}")
     st.stop()
 
+# 슈팅 데이터 추출
+st.subheader("슈팅 데이터 (필드 위 시각화)")
+if 'location' in events.columns:
+    events['x'] = events['location'].apply(lambda loc: loc[0] if isinstance(loc, list) and len(loc) > 0 else None)
+    events['y'] = events['location'].apply(lambda loc: loc[1] if isinstance(loc, list) and len(loc) > 1 else None)
+
+shots = events[events['type'] == 'Shot']
+
+if shots.empty or 'x' not in shots.columns or 'y' not in shots.columns:
+    st.error("슈팅 데이터가 부족하거나 적절한 형식으로 제공되지 않습니다.")
+    st.stop()
+
 # 필드 이미지 위에 슈팅 데이터 표시
 def draw_pitch(ax=None):
     """축구 필드 그리기 함수"""
@@ -81,40 +93,9 @@ def draw_pitch(ax=None):
     ax.add_patch(center_circle)
     return ax
 
-st.header(f"{competition} {selected_season} - {match_selection}")
-st.write("선택한 경기의 데이터")
-
-st.subheader("슈팅 데이터 (필드 위 시각화)")
-shots = events[events['type'] == 'Shot']
-
 fig, ax = plt.subplots(figsize=(12, 8))
 ax = draw_pitch(ax)
 ax.scatter(shots['x'], shots['y'], c='red', label='슈팅 위치', s=100)
 ax.set_title("슈팅 위치 분석")
 ax.legend()
 st.pyplot(fig)
-
-# PDF 생성 함수
-def create_pdf(fig):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="StatsBomb 경기 분석", ln=True, align='C')
-    pdf.add_page()
-    pdf.cell(200, 10, txt="슈팅 위치 시각화", ln=True, align='C')
-    buf = BytesIO()
-    fig.savefig(buf, format='png')
-    buf.seek(0)
-    pdf.image(buf, x=10, y=20, w=180)
-    buf.close()
-    return pdf.output(dest='S').encode('latin1')
-
-# PDF 다운로드 버튼
-if st.sidebar.button("PDF 다운로드"):
-    pdf_data = create_pdf(fig)
-    st.sidebar.download_button(
-        label="PDF 다운로드",
-        data=pdf_data,
-        file_name="match_analysis.pdf",
-        mime="application/pdf",
-    )
