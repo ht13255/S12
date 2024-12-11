@@ -1,4 +1,5 @@
 streamlit
-selenium
+matplotlib
+statsbombpy
+fpdf2
 pandas
-openpyxl
